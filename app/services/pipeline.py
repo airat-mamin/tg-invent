@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 def _model_from_text(text: str, exclude: tuple[str | None, ...], brand: str | None) -> str | None:
     match = nz.model_label().search(nz.clean_text(text))
     if match is not None:
-        model = nz.normalize_value(match.group(1))
-        if nz.is_valid_model(model):
+        model, _ = nz.polish_model(match.group(1), brand)
+        if model:
             return model
     return nz.find_model_candidate(text, exclude=exclude, brand=brand)
 

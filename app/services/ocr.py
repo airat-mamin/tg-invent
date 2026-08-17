@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 SERIAL_LABEL = re.compile(r"(?:S[/\\.\s]?N|SERIAL)\s*[:.#№]?\s*$")
 TAG_LABEL = re.compile(r"(?:SERVICE\s*TAG|SERVICE\s*CODE|\bS[/\\.]?T)\s*[:.#№]?\s*$")
-MODEL_LABEL = re.compile(r"(?:MODEL(?:\s*(?:NO\.?|NAME))?|\bMDL\b)\s*[:.#№]?\s*$")
+MODEL_LABEL = re.compile(
+    r"(?:MODEL(?:\s*(?:NO\.?|NAME|ID))?|\bMDL\b|MONEN[BE8H]|MONEL[BL]?|MODELL?)\s*[:.#№;|]*\s*$"
+)
 
 # Перенос длинного идентификатора на следующую строку; тильду даёт OCR вместо дефиса.
 CONTINUATION_CHARS = "-~–—"
@@ -251,15 +253,18 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
         # Со штрихкода короткие значения принимаются: там источник надёжный.
         serial, printed_serial, serial_fixed = None, None, serial_fixed and bool(tag)
     brand = nz.match_brand(corpus) or nz.infer_brand_from_serial(serial)
-    model = nz.normalize_value(find(nz.model_label(), MODEL_LABEL))
-    if not nz.is_valid_model(model):
+    model, model_fixed = nz.polish_model(
+        find(nz.model_label(), MODEL_LABEL), brand
+    )
+    if not model:
         model = nz.find_model_candidate(corpus, exclude=(serial, tag), brand=brand)
+        model_fixed = False
 
     if not (serial or tag):
         return None
 
     confidences = [block.confidence for block in blocks if block.confidence]
-    corrected = tag_fixed or serial_fixed
+    corrected = tag_fixed or serial_fixed or model_fixed
     weak = bool(confidences) and min(confidences) < 0.8
     return Card(
         brand=brand,
@@ -278,13 +283,16 @@ def scan(variants: ImageVariants) -> tuple[Card | None, str]:
     """Возвращает карточку (если распознана) и сырой текст для следующих контуров."""
     if not engine.enabled:
         return None, ""
-    raw_text = ""
+    texts: list[str] = []
+    best: Card | None = None
     for image in variants.for_ocr():
         blocks = engine.read(image)
         if not blocks:
             continue
-        raw_text = raw_text or nz.clean_text(" ".join(block.text for block in blocks))
+        texts.append(nz.clean_text(" ".join(block.text for block in group_blocks(blocks))))
         card = parse_blocks(blocks)
-        if card is not None:
-            return card, raw_text
-    return None, raw_text
+        if card is None:
+            continue
+        if best is None or (card.model and not best.model):
+            best = card
+    return best, " ".join(texts)

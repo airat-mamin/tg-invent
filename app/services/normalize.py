@@ -34,6 +34,9 @@ CONFUSABLES = {
     "6": "G",
     "Q": "0",
 }
+# Дополнительные пары, которые OCR путает в обозначениях моделей
+# (3↔J на наклейках Samsung: UE32D5000PW → UEJ2D5000PW).
+MODEL_CONFUSABLES = {**CONFUSABLES, "J": "3", "3": "J"}
 
 
 @lru_cache(maxsize=1)
@@ -204,6 +207,38 @@ def part_number(serial: str | None) -> tuple[str, str] | None:
     return (vendor.brand, part) if part else None
 
 
+def _matches_vendor_model(value: str, brand: str | None) -> bool:
+    vendors = [rules().by_brand(brand)] if brand else list(rules().vendors)
+    vendors = [vendor for vendor in vendors if vendor is not None]
+    if not vendors:
+        return True
+    for vendor in vendors:
+        if vendor.model_token is not None and vendor.model_token.fullmatch(value):
+            return True
+        if vendor.model_token is None and not brand:
+            continue
+    return False
+
+
+def polish_model(value: str | None, brand: str | None = None) -> tuple[str | None, bool]:
+    """Исправляет типичные ошибки OCR в обозначении модели по шаблону вендора."""
+    normalized = normalize_value(value)
+    if normalized is None:
+        return None, False
+    if is_valid_model(normalized) and _matches_vendor_model(normalized, brand):
+        return normalized, False
+    for candidate in _confusable_candidates(normalized, mapping=MODEL_CONFUSABLES):
+        if is_valid_model(candidate) and _matches_vendor_model(candidate, brand):
+            return candidate, True
+    # Если производитель известен, не принимаем значение, которое не сходится
+    # с его формой: иначе в карточку попадает мусор OCR вроде MCTOYHHK.
+    if brand is not None and rules().by_brand(brand) and rules().by_brand(brand).model_token:
+        return None, False
+    if is_valid_model(normalized):
+        return normalized, False
+    return None, False
+
+
 def match_model_shape(value: str | None) -> tuple[str, str] | None:
     """Опознаёт обозначение модели по форме, описанной в шаблоне производителя.
 
@@ -235,42 +270,43 @@ def find_model_candidate(
     """Ищет обозначение модели, не опираясь на метку.
 
     На части шильдиков метка модели напечатана только на языке страны выпуска
-    (например, 型号), зато само обозначение продублировано в углу наклейки.
+    (например, 型号 или «Модель»), зато само обозначение продублировано рядом.
+    Кандидаты проверяются по форме из шаблона производителя, в том числе после
+    точечной правки символов, которые OCR путает между собой.
     """
     if not text:
         return None
-    common = rules().common
-    vendor = rules().by_brand(brand)
-    shape = vendor.model_token if vendor and vendor.model_token else None
-
     corpus = clean_text(text)
     blocked = tuple(value for value in exclude if value)
     counts: dict[str, int] = {}
-    positions: dict[str, int] = {}
-    for match in common.model_token.finditer(corpus):
-        token = match.group(1)
-        if token in common.model_stopwords or token in rules().brand_names:
-            continue
-        if shape is not None and not shape.fullmatch(token):
+    for token in re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus):
+        if token in rules().common.model_stopwords or token in rules().brand_names:
             continue
         if any(token in value for value in blocked):
             continue
-        if common.noise_labels.search(corpus[max(0, match.start() - 20) : match.start()]):
+        polished, _ = polish_model(token, brand)
+        if not polished or not _matches_vendor_model(polished, brand):
             continue
-        counts[token] = counts.get(token, 0) + 1
-        positions.setdefault(token, match.start())
+        if brand is None and not any(
+            vendor.model_token and vendor.model_token.fullmatch(polished)
+            for vendor in rules().vendors
+        ) and not rules().common.model_token.fullmatch(polished):
+            continue
+        counts[polished] = counts.get(polished, 0) + 1
     if not counts:
         return None
-    # Обозначение модели обычно повторяется на наклейке дважды, это лучший признак.
-    best = max(counts, key=lambda token: (counts[token], -positions[token]))
+    best = max(counts, key=lambda token: (counts[token], -len(token)))
     return best if is_valid_model(best) else None
 
 
-def _confusable_candidates(value: str, limit: int = 64) -> list[str]:
-    positions = [i for i, char in enumerate(value) if char in CONFUSABLES]
+def _confusable_candidates(
+    value: str, limit: int = 64, mapping: dict[str, str] | None = None
+) -> list[str]:
+    pairs = mapping or CONFUSABLES
+    positions = [i for i, char in enumerate(value) if char in pairs]
     if not positions or len(positions) > 6:
         return []
-    options = [(char, CONFUSABLES[char]) for char in (value[i] for i in positions)]
+    options = [(char, pairs[char]) for char in (value[i] for i in positions)]
     candidates: list[str] = []
     for combo in product(*options):
         chars = list(value)
