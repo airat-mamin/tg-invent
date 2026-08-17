@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS part_models (
     updated_at  TEXT NOT NULL,
     PRIMARY KEY (brand, part)
 );
+CREATE TABLE IF NOT EXISTS user_places (
+    tg_user_id  INTEGER PRIMARY KEY,
+    city        TEXT,
+    street      TEXT,
+    house       TEXT,
+    latitude    REAL,
+    longitude   REAL,
+    updated_at  TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_scans_serial  ON scans (serial_number);
 CREATE INDEX IF NOT EXISTS idx_scans_tag     ON scans (service_tag);
 CREATE INDEX IF NOT EXISTS idx_scans_user    ON scans (tg_user_id);
@@ -179,6 +188,47 @@ class Database:
             (user_id, limit),
         ) as cursor:
             return list(await cursor.fetchall())
+
+    async def get_user_place(self, user_id: int) -> aiosqlite.Row | None:
+        async with self.conn.execute(
+            "SELECT city, street, house, latitude, longitude FROM user_places WHERE tg_user_id = ?",
+            (user_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
+    async def save_user_place(
+        self,
+        user_id: int,
+        city: str | None,
+        street: str | None,
+        house: str | None,
+        latitude: float | None,
+        longitude: float | None,
+    ) -> None:
+        await self.conn.execute(
+            """
+            INSERT INTO user_places
+                (tg_user_id, city, street, house, latitude, longitude, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (tg_user_id) DO UPDATE SET
+                city = excluded.city,
+                street = excluded.street,
+                house = excluded.house,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude,
+                updated_at = excluded.updated_at
+            """,
+            (
+                user_id,
+                city,
+                street,
+                house,
+                latitude,
+                longitude,
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            ),
+        )
+        await self.conn.commit()
 
     async def export_rows(
         self, user_id: int | None, since: datetime | None

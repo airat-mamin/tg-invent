@@ -5,7 +5,8 @@ import pytest
 from app.db.database import Database
 from app.export import exporter
 from app.handlers import edit, scan
-from app.models import Status
+from app.models import Card, Confidence, Source, Status
+from app.texts import ASK_LOCATION
 from tests.factories import SERIAL, SERVICE_TAG, barcode_image, sticker_bytes
 
 
@@ -38,7 +39,9 @@ def make_bot(payload: bytes):
 def make_callback(scan_id: int, action: str = "confirm"):
     callback = MagicMock()
     callback.data = f"scan:{action}:{scan_id}"
+    callback.from_user.id = 42
     callback.message.edit_text = AsyncMock()
+    callback.message.answer = AsyncMock()
     callback.answer = AsyncMock()
     return callback
 
@@ -123,3 +126,59 @@ async def test_duplicate_is_detected(db):
     await edit._finalize(callback, db, AsyncMock(), 2, Status.CONFIRMED)
 
     assert "уже сканировалось" in callback.message.edit_text.await_args.args[0]
+
+
+async def _add_scan(db: Database, user_id: int = 42) -> int:
+    return await db.add_scan(
+        Card(
+            serial_number=SERIAL,
+            source=Source.BARCODE,
+            confidence=Confidence.HIGH,
+        ),
+        user_id=user_id,
+        username="tester",
+        status=Status.PENDING,
+    )
+
+
+async def test_confirm_offers_location_when_empty(db):
+    scan_id = await _add_scan(db)
+    callback = make_callback(scan_id)
+    await edit._finalize(callback, db, AsyncMock(), scan_id, Status.CONFIRMED)
+    sent = [call.args[0] for call in callback.message.answer.await_args_list]
+    assert any(ASK_LOCATION[:20] in text for text in sent)
+
+
+async def test_confirm_skips_location_prompt_when_already_set(db):
+    scan_id = await _add_scan(db)
+    await db.update_field(scan_id, "location", "Москва, Ленина 5, кабинет 12")
+    callback = make_callback(scan_id)
+    await edit._finalize(callback, db, AsyncMock(), scan_id, Status.CONFIRMED)
+    callback.message.answer.assert_not_awaited()
+
+
+async def test_location_is_stored_as_city_street_room(db):
+    scan_id = await _add_scan(db)
+    state = AsyncMock()
+    state.get_data = AsyncMock(
+        return_value={
+            "scan_id": scan_id,
+            "place": {
+                "city": "Москва",
+                "street": "Ленина",
+                "house": "5",
+                "latitude": 55.75,
+                "longitude": 37.61,
+            },
+        }
+    )
+    message = MagicMock()
+    message.answer = AsyncMock()
+    await edit._commit_location(message, db, state, 42, "12")
+
+    row = await db.get_scan(scan_id)
+    assert row["location"] == "Москва, Ленина 5, кабинет 12"
+    saved = await db.get_user_place(42)
+    assert saved["city"] == "Москва"
+    assert saved["street"] == "Ленина"
+    assert saved["house"] == "5"

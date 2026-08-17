@@ -31,6 +31,11 @@ class Settings(BaseSettings):
 
     templates_dir: Path = Path(__file__).resolve().parents[1] / "templates"
 
+    geocode_enabled: bool = True
+    geocode_url: str = "https://nominatim.openstreetmap.org/reverse"
+    geocode_user_agent: str = "it-asset-ocr-bot/1.0"
+    geocode_timeout: int = 8
+
     db_path: Path = Path("data/bot.db")
     store_images: bool = False
     image_dir: Path = Path("data/images")

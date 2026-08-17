@@ -7,10 +7,17 @@ from aiogram.types import CallbackQuery, Message
 
 from app import texts
 from app.db.database import Database, row_to_card
-from app.keyboards.inline import confirmation, field_choice
+from app.keyboards.inline import (
+    field_choice,
+    hide_keyboard,
+    location_actions,
+    room_actions,
+    share_location,
+)
 from app.models import FIELD_TITLES, Status
+from app.services import geocode, parts
 from app.services import normalize as nz
-from app.services import parts
+from app.services.geocode import Place
 
 logger = logging.getLogger(__name__)
 router = Router(name="edit")
@@ -26,6 +33,8 @@ VALIDATORS = {
 
 class EditStates(StatesGroup):
     waiting_value = State()
+    waiting_geo = State()
+    waiting_room = State()
 
 
 def _render_row(row) -> str:
@@ -78,6 +87,8 @@ async def _finalize(
 
     await callback.message.edit_text(text, reply_markup=None)
     await callback.answer("Сохранено")
+    if not row["location"]:
+        await _offer_location(callback.message, db, state, scan_id, callback.from_user.id)
 
 
 @router.callback_query(F.data.startswith("scan:discard:"))
@@ -86,7 +97,8 @@ async def on_discard(callback: CallbackQuery, db: Database, state: FSMContext) -
     await state.clear()
     await db.set_status(scan_id, Status.DISCARDED)
     await callback.message.edit_text(
-        "🔄 Запись отброшена.\n\n" + texts.HELP.split("\n\nКоманды:")[0], reply_markup=None
+        "🔄 Запись отброшена.\n\n" + texts.HELP.split("\n\nКоманды:")[0],
+        reply_markup=None,
     )
     await callback.answer()
 
@@ -100,9 +112,13 @@ async def on_edit(callback: CallbackQuery, db: Database, state: FSMContext) -> N
 
 
 @router.callback_query(F.data.startswith("field:"))
-async def on_field(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_field(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
     _, field, raw_id = callback.data.split(":")
     scan_id = int(raw_id)
+    if field == "location":
+        await _offer_location(callback.message, db, state, scan_id, callback.from_user.id)
+        await callback.answer()
+        return
     hint = VALIDATORS[field][2]
     title = FIELD_TITLES.get(field, "Расположение")
     await state.set_state(EditStates.waiting_value)
@@ -139,9 +155,141 @@ async def on_value(message: Message, state: FSMContext, db: Database) -> None:
     await message.answer(_render_row(row), reply_markup=field_choice(scan_id, row_to_card(row)))
 
 
+def _place_from_mapping(data: dict) -> Place | None:
+    if not data:
+        return None
+    place = Place(
+        city=data.get("city"),
+        street=data.get("street"),
+        house=data.get("house"),
+        latitude=data.get("latitude"),
+        longitude=data.get("longitude"),
+    )
+    return place if place.address() or place.latitude is not None else None
+
+
+def _place_from_row(row) -> Place | None:
+    if row is None:
+        return None
+    return _place_from_mapping(dict(row))
+
+
+async def _offer_location(
+    message: Message, db: Database, state: FSMContext, scan_id: int, user_id: int
+) -> None:
+    last = _place_from_row(await db.get_user_place(user_id))
+    await state.set_state(EditStates.waiting_geo)
+    await state.update_data(scan_id=scan_id, place=last.to_dict() if last else None)
+    await message.answer(texts.ASK_LOCATION, reply_markup=share_location())
+    await message.answer(
+        "Либо выберите действие:",
+        reply_markup=location_actions(scan_id, last.address() if last else None),
+    )
+
+
+async def _ask_room(
+    message: Message, state: FSMContext, scan_id: int, intro: str | None = None
+) -> None:
+    await state.set_state(EditStates.waiting_room)
+    if intro:
+        await message.answer(intro, reply_markup=hide_keyboard())
+    await message.answer(texts.ASK_ROOM, reply_markup=room_actions(scan_id))
+
+
+async def _commit_location(
+    message: Message, db: Database, state: FSMContext, user_id: int, room: str | None
+) -> None:
+    data = await state.get_data()
+    scan_id = int(data["scan_id"])
+    place = _place_from_mapping(data.get("place") or {})
+    value = geocode.format_location(place, room)
+    await db.update_field(scan_id, "location", value)
+    if place and place.address():
+        await db.save_user_place(
+            user_id, place.city, place.street, place.house, place.latitude, place.longitude
+        )
+    await state.clear()
+    row = await db.get_scan(scan_id)
+    text = _render_row(row) + "\n\n" + (texts.LOCATION_SAVED if value else texts.LOCATION_SKIPPED)
+    await message.answer(text, reply_markup=hide_keyboard())
+
+
+@router.callback_query(F.data.startswith("loc:ask:"))
+async def on_ask_location(
+    callback: CallbackQuery, db: Database, state: FSMContext
+) -> None:
+    scan_id = int(callback.data.split(":")[2])
+    await _offer_location(callback.message, db, state, scan_id, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("loc:reuse:"))
+async def on_reuse_location(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
+    scan_id = int(callback.data.split(":")[2])
+    last = _place_from_row(await db.get_user_place(callback.from_user.id))
+    if last is None:
+        await callback.answer("Сохранённого адреса нет", show_alert=True)
+        return
+    await state.update_data(scan_id=scan_id, place=last.to_dict())
+    await callback.answer()
+    await _ask_room(callback.message, state, scan_id, f"Адрес: <b>{last.address()}</b>")
+
+
+@router.callback_query(F.data.startswith("loc:skip:"))
+async def on_skip_location(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.answer(texts.LOCATION_SKIPPED, reply_markup=hide_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("loc:noroom:"))
+async def on_no_room(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
+    await callback.answer()
+    await _commit_location(callback.message, db, state, callback.from_user.id, room=None)
+
+
+@router.message(EditStates.waiting_geo, F.location)
+async def on_geo(message: Message, state: FSMContext) -> None:
+    location = message.location
+    place = await geocode.reverse_geocode(location.latitude, location.longitude)
+    data = await state.get_data()
+    scan_id = int(data["scan_id"])
+    await state.update_data(place=place.to_dict())
+    address = place.address()
+    if not address:
+        await message.answer(texts.GEO_FAILED, reply_markup=hide_keyboard())
+        return
+    await _ask_room(message, state, scan_id, f"Похоже, это <b>{address}</b>.")
+
+
+@router.message(EditStates.waiting_geo, F.text)
+async def on_geo_text(message: Message, state: FSMContext) -> None:
+    if message.text.startswith("/"):
+        return
+    data = await state.get_data()
+    scan_id = int(data["scan_id"])
+    place = geocode.parse_typed_address(message.text)
+    if not place.address():
+        await message.answer(texts.GEO_FAILED, reply_markup=hide_keyboard())
+        return
+    await state.update_data(place=place.to_dict())
+    await _ask_room(message, state, scan_id, f"Адрес: <b>{place.address()}</b>")
+
+
+@router.message(EditStates.waiting_room, F.text)
+async def on_room(message: Message, state: FSMContext, db: Database) -> None:
+    if message.text.startswith("/"):
+        return
+    room = geocode.normalize_room(message.text)
+    if message.text.strip() != "-" and room is None:
+        await message.answer(texts.ROOM_INVALID)
+        return
+    await _commit_location(message, db, state, message.from_user.id, room)
+
+
 @router.callback_query(F.data.startswith("scan:"))
 async def on_unknown(callback: CallbackQuery) -> None:
     await callback.answer("Действие устарело, отправьте фото заново", show_alert=True)
 
 
-__all__ = ["router", "confirmation"]
+__all__ = ["router"]

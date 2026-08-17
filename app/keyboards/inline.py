@@ -1,4 +1,11 @@
-from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    CopyTextButton,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.models import FIELD_TITLES, Card
@@ -30,7 +37,10 @@ def confirmation(scan_id: int, card: Card | None = None) -> InlineKeyboardMarkup
         InlineKeyboardButton(text="✅ Верно", callback_data=f"scan:confirm:{scan_id}"),
         InlineKeyboardButton(text="✏️ Исправить", callback_data=f"scan:edit:{scan_id}"),
     )
-    builder.row(InlineKeyboardButton(text="🔄 Переснять", callback_data=f"scan:discard:{scan_id}"))
+    builder.row(
+        InlineKeyboardButton(text="📍 Расположение", callback_data=f"loc:ask:{scan_id}"),
+        InlineKeyboardButton(text="🔄 Переснять", callback_data=f"scan:discard:{scan_id}"),
+    )
     return builder.as_markup()
 
 
@@ -47,7 +57,7 @@ def field_choice(scan_id: int, card: Card | None = None) -> InlineKeyboardMarkup
     for index in range(0, len(fields), 2):
         builder.row(*fields[index : index + 2])
     builder.row(
-        InlineKeyboardButton(text="📍 Расположение", callback_data=f"field:location:{scan_id}")
+        InlineKeyboardButton(text="📍 Расположение", callback_data=f"loc:ask:{scan_id}")
     )
     builder.row(InlineKeyboardButton(text="💾 Готово", callback_data=f"scan:done:{scan_id}"))
     return builder.as_markup()
@@ -60,5 +70,35 @@ def export_formats() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="CSV", callback_data="export:csv"),
                 InlineKeyboardButton(text="XLSX", callback_data="export:xlsx"),
             ]
+        ]
+    )
+
+
+def share_location() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📍 Отправить геопозицию", request_location=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder="Или введите адрес вручную",
+    )
+
+
+def hide_keyboard() -> ReplyKeyboardRemove:
+    return ReplyKeyboardRemove()
+
+
+def location_actions(scan_id: int, last_address: str | None = None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if last_address:
+        label = last_address if len(last_address) <= 40 else last_address[:37] + "…"
+        builder.row(InlineKeyboardButton(text=f"↩ {label}", callback_data=f"loc:reuse:{scan_id}"))
+    builder.row(InlineKeyboardButton(text="Пропустить", callback_data=f"loc:skip:{scan_id}"))
+    return builder.as_markup()
+
+
+def room_actions(scan_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Без кабинета", callback_data=f"loc:noroom:{scan_id}")]
         ]
     )

@@ -10,6 +10,7 @@ from aiogram.types import BufferedInputFile, Message
 from app import texts
 from app.db.database import Database
 from app.export import exporter
+from app.keyboards.inline import hide_keyboard
 from app.services import parts
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def cmd_help(message: Message) -> None:
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer(texts.CANCELLED)
+    await message.answer(texts.CANCELLED, reply_markup=hide_keyboard())
 
 
 @router.message(Command("last"))
@@ -45,9 +46,10 @@ async def cmd_last(message: Message, db: Database) -> None:
     for row in rows:
         identifier = row["serial_display"] or row["serial_number"] or row["service_tag"] or "—"
         title = " ".join(part for part in (row["brand"], row["model"]) if part) or "Без модели"
+        extra = f" · {escape(row['location'])}" if row["location"] else ""
         lines.append(
             f"• {row['created_at'][:16].replace('T', ' ')} — {escape(title)}: "
-            f"<code>{escape(identifier)}</code>"
+            f"<code>{escape(identifier)}</code>{extra}"
         )
     await message.answer("\n".join(lines))
 

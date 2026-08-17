@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 from aiogram import Bot, F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app import texts
@@ -47,17 +48,19 @@ def _store_image(raw: bytes, user_id: int) -> str | None:
 
 
 @router.message(F.photo)
-async def handle_photo(message: Message, bot: Bot, db: Database) -> None:
-    await _process(message, bot, db, message.photo[-1].file_id, message.photo[-1].file_size or 0)
+async def handle_photo(message: Message, bot: Bot, db: Database, state: FSMContext) -> None:
+    await _process(
+        message, bot, db, message.photo[-1].file_id, message.photo[-1].file_size or 0, state
+    )
 
 
 @router.message(F.document)
-async def handle_document(message: Message, bot: Bot, db: Database) -> None:
+async def handle_document(message: Message, bot: Bot, db: Database, state: FSMContext) -> None:
     document = message.document
     if not (document.mime_type or "").startswith("image/"):
         await message.answer(texts.UNSUPPORTED)
         return
-    await _process(message, bot, db, document.file_id, document.file_size or 0)
+    await _process(message, bot, db, document.file_id, document.file_size or 0, state)
 
 
 @router.message()
@@ -65,7 +68,16 @@ async def handle_unsupported(message: Message) -> None:
     await message.answer(texts.UNSUPPORTED)
 
 
-async def _process(message: Message, bot: Bot, db: Database, file_id: str, size: int) -> None:
+async def _process(
+    message: Message,
+    bot: Bot,
+    db: Database,
+    file_id: str,
+    size: int,
+    state: FSMContext | None = None,
+) -> None:
+    if state is not None:
+        await state.clear()
     if size > MAX_FILE_SIZE:
         await message.answer(texts.TOO_LARGE)
         return
