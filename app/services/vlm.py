@@ -48,6 +48,8 @@ def card_from_payload(payload: dict, raw: str) -> Card | None:
     serial, serial_fixed = nz.repair_identifier(payload.get("serial_number"), nz.is_valid_serial)
     serial, serial_polished = nz.polish_serial(serial)
     serial_fixed = serial_fixed or serial_polished
+    printed_serial = serial
+    serial = nz.canonical_serial(serial)
     model = nz.normalize_value(payload.get("model"))
     if not nz.is_valid_model(model):
         model = None
@@ -59,6 +61,7 @@ def card_from_payload(payload: dict, raw: str) -> Card | None:
         brand=brand,
         model=model,
         serial_number=serial,
+        serial_display=nz.display_serial(serial, printed_serial),
         service_tag=tag,
         source=Source.VLM,
         confidence=Confidence.LOW,

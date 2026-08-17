@@ -105,5 +105,5 @@ async def _process(message: Message, bot: Bot, db: Database, file_id: str, size:
         result.duration_ms,
     )
     await status_message.edit_text(
-        texts.render_card(result.card), reply_markup=confirmation(scan_id)
+        texts.render_card(result.card), reply_markup=confirmation(scan_id, result.card)
     )

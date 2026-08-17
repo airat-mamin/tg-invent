@@ -6,6 +6,7 @@ from typing import Any
 import aiosqlite
 
 from app.models import Card, Confidence, Source, Status
+from app.services import normalize
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS scans (
     brand           TEXT,
     model           TEXT,
     serial_number   TEXT,
+    serial_display  TEXT,
     service_tag     TEXT,
     source          TEXT    NOT NULL,
     confidence      TEXT    NOT NULL,
@@ -33,6 +35,8 @@ CREATE INDEX IF NOT EXISTS idx_scans_user    ON scans (tg_user_id);
 CREATE INDEX IF NOT EXISTS idx_scans_created ON scans (created_at);
 """
 
+MIGRATIONS = ("ALTER TABLE scans ADD COLUMN serial_display TEXT",)
+
 EXPORT_COLUMNS = (
     "id",
     "created_at",
@@ -41,6 +45,7 @@ EXPORT_COLUMNS = (
     "brand",
     "model",
     "serial_number",
+    "serial_display",
     "service_tag",
     "source",
     "confidence",
@@ -59,8 +64,18 @@ class Database:
         self._conn = await aiosqlite.connect(self._path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(SCHEMA)
+        await self._migrate()
         await self._conn.commit()
         logger.info("База данных готова: %s", self._path)
+
+    async def _migrate(self) -> None:
+        """Досоздаёт колонки, появившиеся после первого запуска бота."""
+        for statement in MIGRATIONS:
+            try:
+                await self.conn.execute(statement)
+            except aiosqlite.OperationalError as error:
+                if "duplicate column" not in str(error).lower():
+                    raise
 
     async def close(self) -> None:
         if self._conn is not None:
@@ -84,9 +99,9 @@ class Database:
         cursor = await self.conn.execute(
             """
             INSERT INTO scans (created_at, tg_user_id, tg_username, brand, model, serial_number,
-                               service_tag, source, confidence, status, raw_text, image_path,
-                               duration_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               serial_display, service_tag, source, confidence, status, raw_text,
+                               image_path, duration_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -95,6 +110,7 @@ class Database:
                 card.brand,
                 card.model,
                 card.serial_number,
+                card.serial_display,
                 card.service_tag,
                 str(card.source),
                 str(card.confidence),
@@ -118,7 +134,15 @@ class Database:
     async def update_field(self, scan_id: int, field: str, value: str | None) -> None:
         if field not in {"brand", "model", "serial_number", "service_tag", "location"}:
             raise ValueError(f"Недопустимое поле: {field}")
-        await self.conn.execute(f"UPDATE scans SET {field} = ? WHERE id = ?", (value, scan_id))
+        if field == "serial_number":
+            # Оба представления серийного номера должны меняться вместе.
+            canonical = normalize.canonical_serial(value)
+            await self.conn.execute(
+                "UPDATE scans SET serial_number = ?, serial_display = ? WHERE id = ?",
+                (canonical, normalize.display_serial(canonical, value), scan_id),
+            )
+        else:
+            await self.conn.execute(f"UPDATE scans SET {field} = ? WHERE id = ?", (value, scan_id))
         await self.conn.commit()
 
     async def find_duplicate(
@@ -213,6 +237,7 @@ def row_to_card(row: aiosqlite.Row) -> Card:
         brand=row["brand"],
         model=row["model"],
         serial_number=row["serial_number"],
+        serial_display=row["serial_display"] if "serial_display" in columns else None,
         service_tag=row["service_tag"],
         source=Source(row["source"]),
         confidence=Confidence(row["confidence"]),

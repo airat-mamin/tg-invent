@@ -27,14 +27,18 @@ class EditStates(StatesGroup):
     waiting_value = State()
 
 
-async def _refresh_card(message: Message, db: Database, scan_id: int, keyboard) -> None:
-    row = await db.get_scan(scan_id)
-    if row is None:
-        return
+def _render_row(row) -> str:
     text = texts.render_card(row_to_card(row))
     if row["location"]:
         text += f"\n📍 {row['location']}"
-    await message.edit_text(text, reply_markup=keyboard)
+    return text
+
+
+async def _refresh_card(message: Message, db: Database, scan_id: int) -> None:
+    row = await db.get_scan(scan_id)
+    if row is None:
+        return
+    await message.edit_text(_render_row(row), reply_markup=field_choice(scan_id, row_to_card(row)))
 
 
 @router.callback_query(F.data.startswith("scan:confirm:"))
@@ -63,9 +67,7 @@ async def _finalize(
     await db.set_status(scan_id, status)
     duplicate = await db.find_duplicate(row["serial_number"], row["service_tag"], scan_id)
 
-    text = texts.render_card(row_to_card(row))
-    if row["location"]:
-        text += f"\n📍 {row['location']}"
+    text = _render_row(row)
     text += "\n\n✅ Сохранено" + (" с исправлениями" if status is Status.CORRECTED else "")
     if duplicate is not None:
         text += "\n" + texts.render_duplicate(duplicate["created_at"], duplicate["tg_username"])
@@ -89,7 +91,7 @@ async def on_discard(callback: CallbackQuery, db: Database, state: FSMContext) -
 async def on_edit(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
     scan_id = int(callback.data.split(":")[2])
     await state.set_data({"scan_id": scan_id, "edited": False})
-    await _refresh_card(callback.message, db, scan_id, field_choice(scan_id))
+    await _refresh_card(callback.message, db, scan_id)
     await callback.answer("Выберите поле для исправления")
 
 
@@ -128,10 +130,7 @@ async def on_value(message: Message, state: FSMContext, db: Database) -> None:
     await state.set_state(None)
 
     row = await db.get_scan(scan_id)
-    text = texts.render_card(row_to_card(row))
-    if row["location"]:
-        text += f"\n📍 {row['location']}"
-    await message.answer(text, reply_markup=field_choice(scan_id))
+    await message.answer(_render_row(row), reply_markup=field_choice(scan_id, row_to_card(row)))
 
 
 @router.callback_query(F.data.startswith("scan:"))

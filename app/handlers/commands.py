@@ -42,7 +42,7 @@ async def cmd_last(message: Message, db: Database) -> None:
         return
     lines = ["🗂 <b>Последние сканирования</b>", ""]
     for row in rows:
-        identifier = row["serial_number"] or row["service_tag"] or "—"
+        identifier = row["serial_display"] or row["serial_number"] or row["service_tag"] or "—"
         title = " ".join(part for part in (row["brand"], row["model"]) if part) or "Без модели"
         lines.append(
             f"• {row['created_at'][:16].replace('T', ' ')} — {escape(title)}: "

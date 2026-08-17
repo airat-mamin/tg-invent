@@ -12,6 +12,7 @@ HEADERS = {
     "brand": "Производитель",
     "model": "Модель",
     "serial_number": "Серийный номер",
+    "serial_display": "Серийный номер (как на наклейке)",
     "service_tag": "Service Tag",
     "source": "Источник",
     "confidence": "Доверие",

@@ -239,6 +239,8 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
     )
     serial, serial_polished = nz.polish_serial(serial)
     serial_fixed = serial_fixed or serial_polished
+    printed_serial = serial
+    serial = nz.canonical_serial(serial)
     model = nz.normalize_value(find(nz.MODEL_RE, MODEL_LABEL))
     if not nz.is_valid_model(model):
         model = nz.find_model_candidate(corpus, exclude=(serial, tag))
@@ -253,6 +255,7 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
         brand=nz.match_brand(corpus),
         model=model,
         serial_number=serial,
+        serial_display=nz.display_serial(serial, printed_serial),
         service_tag=tag,
         source=Source.OCR,
         confidence=Confidence.MEDIUM if (corrected or weak) else Confidence.HIGH,

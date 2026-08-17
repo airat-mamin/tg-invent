@@ -43,7 +43,9 @@ class Card:
 
     brand: str | None = None
     model: str | None = None
+    # serial_number — машинный вид (как в штрихкоде), serial_display — как напечатано.
     serial_number: str | None = None
+    serial_display: str | None = None
     service_tag: str | None = None
     source: Source = Source.BARCODE
     confidence: Confidence = Confidence.LOW

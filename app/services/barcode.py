@@ -83,10 +83,12 @@ def scan(variants: ImageVariants) -> Card | None:
     if serial is not None and service_tag is not None and serial == service_tag:
         serial = None
 
+    serial = nz.canonical_serial(serial)
     return Card(
         brand=None,
         model=None,
         serial_number=serial,
+        serial_display=nz.display_serial(serial),
         service_tag=service_tag,
         source=Source.BARCODE,
         confidence=Confidence.HIGH,

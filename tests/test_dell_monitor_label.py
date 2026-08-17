@@ -43,7 +43,9 @@ def test_model_is_found_without_latin_label():
 def test_service_tag_and_multiline_serial():
     card = parse_blocks(label_blocks())
     assert card.service_tag == "84ZCSF3"
-    assert card.serial_number == "CN-0Y71R3-TV200-19B-1EHT-A01"
+    # В базу и для копирования идёт машинный вид, на экран — как напечатано
+    assert card.serial_number == "CN0Y71R3TV20019B1EHTA01"
+    assert card.serial_display == "CN-0Y71R3-TV200-19B-1EHT-A01"
 
 
 def test_express_service_code_is_not_taken_for_service_tag():

@@ -49,13 +49,18 @@ def render_card(card: Card) -> str:
     source = SOURCE_TITLES.get(card.source, str(card.source))
     lines = [f"🖥 <b>Оборудование распознано</b> ({source})", ""]
     for field, title in FIELD_TITLES.items():
-        value = getattr(card, field)
+        # Серийный номер показываем так, как он напечатан на наклейке: с дефисами
+        # его удобнее сверять глазами, чем сплошную строку из штрихкода.
+        value = card.serial_display or card.serial_number if field == "serial_number" else None
+        value = value or getattr(card, field)
         if value:
             lines.append(f"• {title}: <code>{escape(str(value))}</code>")
     lines.append("")
     if card.confidence is not Confidence.HIGH or card.corrected_symbols:
         lines.append(LOW_CONFIDENCE_WARNING)
-    lines.append("<i>Нажмите на значение, чтобы скопировать его.</i>")
+    lines.append("<i>Нажмите на значение, чтобы скопировать его как есть.</i>")
+    if card.serial_display and card.serial_number and card.serial_display != card.serial_number:
+        lines.append("<i>Кнопка ниже копирует серийный номер без дефисов.</i>")
     return "\n".join(lines)
 
 

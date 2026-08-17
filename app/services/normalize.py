@@ -154,6 +154,46 @@ def polish_serial(serial: str | None) -> tuple[str | None, bool]:
     return serial, False
 
 
+# Группировка PPID при печати на наклейке: CN-0Y71R3-TV200-19B-13QT-A01.
+PPID_GROUPS = {23: (2, 6, 5, 3, 4, 3), 22: (2, 5, 5, 3, 4, 3)}
+
+
+def canonical_serial(serial: str | None) -> str | None:
+    """Приводит серийный номер к машинному виду.
+
+    Дефисы в PPID Dell — только визуальное разделение групп, в штрихкоде их нет.
+    У остальных производителей дефис может быть частью номера, поэтому убираем
+    его лишь тогда, когда результат опознаётся как PPID.
+    """
+    if not serial:
+        return serial
+    compact = serial.replace("-", "")
+    if "-" in serial and DELL_PPID_RE.match(compact):
+        return compact
+    return serial
+
+
+def display_serial(canonical: str | None, printed: str | None = None) -> str | None:
+    """Возвращает номер в том виде, в каком он напечатан на наклейке.
+
+    Если OCR прочитал номер с дефисами и он сходится с машинным вариантом,
+    используется прочитанная разбивка, иначе группы расставляются по формату PPID.
+    """
+    if not canonical:
+        return canonical
+    if printed and "-" in printed and printed.replace("-", "") == canonical:
+        return printed
+    groups = PPID_GROUPS.get(len(canonical))
+    if groups is None or not DELL_PPID_RE.match(canonical):
+        return canonical
+    parts = []
+    position = 0
+    for size in groups:
+        parts.append(canonical[position : position + size])
+        position += size
+    return "-".join(parts)
+
+
 def infer_brand_from_serial(serial: str | None) -> str | None:
     """Определяет бренд по формату идентификатора.
 
