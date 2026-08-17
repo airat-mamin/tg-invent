@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     ocr_enabled: bool = True
     ocr_langs: str = "en"
-    # Штрихкод не содержит модель: флаг разрешает дочитать её через OCR ценой времени ответа.
+    # Штрихкод не содержит бренд и модель: флаг разрешает дочитать их OCR ценой времени ответа.
     ocr_enrich_after_barcode: bool = False
 
     vlm_enabled: bool = False
