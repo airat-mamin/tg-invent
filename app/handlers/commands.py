@@ -10,6 +10,7 @@ from aiogram.types import BufferedInputFile, Message
 from app import texts
 from app.db.database import Database
 from app.export import exporter
+from app.services import parts
 
 logger = logging.getLogger(__name__)
 router = Router(name="commands")
@@ -71,6 +72,27 @@ async def cmd_export(
     )
     await message.answer_document(
         BufferedInputFile(exporter.to_xlsx(rows), filename=f"inventory-{stamp}.xlsx")
+    )
+
+
+@router.message(Command("parts"))
+async def cmd_parts(message: Message, db: Database, is_admin: bool = False) -> None:
+    if not is_admin:
+        await message.answer("Команда доступна только администраторам.")
+        return
+    rows = await db.list_part_models()
+    if not rows:
+        await message.answer(
+            "Соответствий «номер детали → модель» пока нет. "
+            "Они появятся, когда модель будет прочитана с наклейки или введена вручную."
+        )
+        return
+    snippet = escape(parts.as_yaml(rows))
+    await message.answer(
+        f"🧩 <b>Соответствия номеров деталей</b> ({len(rows)})\n\n"
+        f"<pre>{snippet}</pre>\n"
+        "Фрагмент можно перенести в шаблон производителя, чтобы соответствия "
+        "пережили пересоздание базы."
     )
 
 

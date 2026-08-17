@@ -234,10 +234,10 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
         return _search_by_labels(blocks, label_pattern)
 
     tag, tag_fixed = nz.repair_identifier(
-        find(nz.SERVICE_TAG_RE, TAG_LABEL), nz.is_valid_service_tag
+        find(nz.service_tag_label(), TAG_LABEL), nz.is_valid_service_tag
     )
     serial, serial_fixed = nz.repair_identifier(
-        find(nz.SERIAL_RE, SERIAL_LABEL), nz.is_valid_serial
+        find(nz.serial_label(), SERIAL_LABEL), nz.is_valid_serial
     )
     serial, serial_polished = nz.polish_serial(serial)
     serial_fixed = serial_fixed or serial_polished
@@ -247,9 +247,10 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
         # Короткие «номера» из OCR почти всегда оказываются обрывком мусорного текста;
         # со штрихкода короткие значения принимаются, там источник надёжный.
         serial, printed_serial, serial_fixed = None, None, serial_fixed and bool(tag)
-    model = nz.normalize_value(find(nz.MODEL_RE, MODEL_LABEL))
+    brand = nz.match_brand(corpus) or nz.infer_brand_from_serial(serial)
+    model = nz.normalize_value(find(nz.model_label(), MODEL_LABEL))
     if not nz.is_valid_model(model):
-        model = nz.find_model_candidate(corpus, exclude=(serial, tag))
+        model = nz.find_model_candidate(corpus, exclude=(serial, tag), brand=brand)
 
     if not (serial or tag):
         return None
@@ -258,7 +259,7 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
     corrected = tag_fixed or serial_fixed
     weak = bool(confidences) and min(confidences) < 0.8
     return Card(
-        brand=nz.match_brand(corpus),
+        brand=brand,
         model=model,
         serial_number=serial,
         serial_display=nz.display_serial(serial, printed_serial),

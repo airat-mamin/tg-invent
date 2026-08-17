@@ -1,39 +1,23 @@
+"""Нормализация и валидация значений с шильдика.
+
+Правила вынесены в шаблоны (каталог `templates`): у каждого производителя свой
+формат идентификаторов, и добавление нового не должно требовать правки кода.
+"""
+
 import re
 from difflib import SequenceMatcher
+from functools import lru_cache
 from itertools import product
 
-BRANDS = (
-    "DELL",
-    "HP",
-    "HEWLETT-PACKARD",
-    "LENOVO",
-    "SAMSUNG",
-    "LG",
-    "ACER",
-    "ASUS",
-    "PHILIPS",
-    "AOC",
-    "BENQ",
-    "VIEWSONIC",
-    "IIYAMA",
-    "NEC",
-    "EIZO",
-    "HUAWEI",
-    "XIAOMI",
-    "MSI",
-    "GIGABYTE",
-    "DEXP",
-    "IRBIS",
-    "APPLE",
-    "FUJITSU",
-    "TOSHIBA",
-)
+from app.config import settings
+from app.services.vendors import Registry, load_registry
 
 CYRILLIC_TO_LATIN = str.maketrans(
     "АВЕКМНОРСТУХасеорхуѕ",
     "ABEKMHOPCTYXaceopxys",
 )
 
+# Пары символов, которые OCR путает между собой.
 CONFUSABLES = {
     "O": "0",
     "0": "O",
@@ -51,32 +35,10 @@ CONFUSABLES = {
     "Q": "0",
 }
 
-SERVICE_TAG_RE = re.compile(
-    # «Service Code» намеренно не поддерживается: на шильдиках Dell так начинается
-    # Express Service Code — числовой код, а не сервисный тег.
-    r"(?:SERVICE\s*TAG|\bS[/\\.]?T\b)\s*[:.#№]?\s*([A-Z0-9]{7})\b"
-)
-SERIAL_RE = re.compile(
-    # Границы слова обязательны: без них «SN» находится внутри мусорного текста
-    # OCR вроде «SSNATSUNT», и из шума собирается правдоподобный серийный номер.
-    r"(?:\bS[/\\.\s]?N\b|\bSERIAL\s*(?:NO\.?|NUMBER|NUM)?|序列号|序号)"
-    r"\s*[:.#№]?\s*([A-Z0-9][A-Z0-9-]{4,29})\b"
-)
-MODEL_RE = re.compile(
-    r"(?:MODEL(?:\s*(?:NO\.?|NAME))?|\bMDL\b|型号|型號)\s*[:.#№]?\s*([A-Z0-9][A-Z0-9\-/]{1,23})\b"
-)
 
-# Типовая форма обозначения модели монитора или ПК: E2722H, U2723QE, P2419HC, T3600.
-MODEL_TOKEN_RE = re.compile(r"\b([A-Z]{1,3}\d{3,4}[A-Z]{0,4})\b")
-MODEL_STOPWORDS = frozenset(
-    {"CCC", "CE", "FCC", "EAC", "HF", "XY", "AC", "DC", "HZ", "USB", "HDMI", "LED", "LCD"}
-)
-
-MAC_RE = re.compile(r"\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b")
-NOISE_LABELS = re.compile(r"\b(P/?N|PART\s*(?:NO|NUMBER)|FCC\s*ID|EAC|MAC|REV|LOT|BOM)\b")
-NOISE_VALUES = frozenset(
-    {"NULL", "NONE", "N/A", "NA", "-", "—", "UNKNOWN", "NOTFOUND", "NOT FOUND", ""}
-)
+@lru_cache(maxsize=1)
+def rules() -> Registry:
+    return load_registry(settings.templates_dir)
 
 
 def clean_text(text: str) -> str:
@@ -89,7 +51,7 @@ def normalize_value(value: str | None) -> str | None:
         return None
     cleaned = value.translate(CYRILLIC_TO_LATIN).upper().strip()
     cleaned = cleaned.strip(":.#№*|,;()[]{}<>\"' \t\r\n")
-    if cleaned in NOISE_VALUES:
+    if cleaned in rules().common.noise_values:
         return None
     return cleaned or None
 
@@ -103,11 +65,11 @@ def normalize_identifier(value: str | None) -> str | None:
 
 
 def is_valid_service_tag(value: str | None) -> bool:
-    return bool(value) and re.fullmatch(r"[A-Z0-9]{7}", value or "") is not None
+    return bool(value) and rules().common.valid_service_tag.fullmatch(value or "") is not None
 
 
 def is_valid_serial(value: str | None) -> bool:
-    if not value or not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{4,29}", value):
+    if not value or not rules().common.valid_serial.fullmatch(value):
         return False
     return any(char.isdigit() for char in value)
 
@@ -115,62 +77,66 @@ def is_valid_serial(value: str | None) -> bool:
 def is_valid_model(value: str | None) -> bool:
     if not value or not (2 <= len(value) <= 25):
         return False
-    if value in BRANDS:
+    if value in rules().brand_names:
         return False
-    return re.fullmatch(r"[A-Z0-9][A-Z0-9\-/ ]{1,24}", value) is not None
+    return rules().common.valid_model.fullmatch(value) is not None
 
 
 def match_brand(text: str | None) -> str | None:
     """Находит бренд в тексте, допуская одну ошибку распознавания в слове."""
     if not text:
         return None
+    known = rules().brand_names
     words = re.findall(r"[A-Z][A-Z\-]{1,20}", clean_text(text))
     for word in words:
-        if word in BRANDS:
-            return word
+        if word in known:
+            return _canonical_brand(word)
     for word in words:
         if len(word) < 4:
             continue
-        for brand in BRANDS:
+        for brand in known:
             if len(brand) < 4 or abs(len(word) - len(brand)) > 1:
                 continue
             if SequenceMatcher(None, word, brand).ratio() >= 0.85:
-                return brand
+                return _canonical_brand(brand)
     return None
 
 
-# PPID Dell печатается двумя способами: слитно (CN011PWC…) и через дефисы (CN-0Y71R3-TV200-…).
-# Первые два символа — код страны сборки, следом всегда идёт цифра.
-DELL_COUNTRIES = "CN|MY|TW|SG|MX|BR|IN|PH|TH|CZ|IE"
-DELL_PPID_RE = re.compile(rf"^(?:{DELL_COUNTRIES})-?0[A-Z0-9]{{5}}-?[A-Z0-9-]{{5,}}$")
-PPID_LETTER_O_RE = re.compile(rf"^((?:{DELL_COUNTRIES})-?)O")
+def _canonical_brand(name: str) -> str:
+    vendor = rules().by_brand(name)
+    return vendor.brand if vendor else name
 
 
 def polish_serial(serial: str | None) -> tuple[str | None, bool]:
-    """Исправляет типичную ошибку OCR в PPID: букву O вместо нуля после кода страны."""
-    if not serial or DELL_PPID_RE.match(serial):
+    """Применяет точечные правки шаблона к серийному номеру.
+
+    Правка принимается, только если после неё значение начинает соответствовать
+    формату производителя, — иначе она была бы догадкой на пустом месте.
+    """
+    if not serial:
         return serial, False
-    candidate = PPID_LETTER_O_RE.sub(r"\g<1>0", serial)
-    if candidate != serial and DELL_PPID_RE.match(candidate):
-        return candidate, True
+    for vendor in rules().vendors:
+        if vendor.serial is None or vendor.serial.matches(serial):
+            continue
+        for fix in vendor.serial.fixes:
+            candidate = fix.pattern.sub(fix.replacement, serial)
+            if candidate != serial and vendor.serial.matches(candidate):
+                return candidate, True
     return serial, False
-
-
-# Группировка PPID при печати на наклейке: CN-0Y71R3-TV200-19B-13QT-A01.
-PPID_GROUPS = {23: (2, 6, 5, 3, 4, 3), 22: (2, 5, 5, 3, 4, 3)}
 
 
 def canonical_serial(serial: str | None) -> str | None:
     """Приводит серийный номер к машинному виду.
 
-    Дефисы в PPID Dell — только визуальное разделение групп, в штрихкоде их нет.
-    У остальных производителей дефис может быть частью номера, поэтому убираем
-    его лишь тогда, когда результат опознаётся как PPID.
+    У Dell дефисы в PPID только разделяют группы, в штрихкоде их нет. У других
+    производителей дефис может быть частью номера, поэтому убирается он лишь
+    тогда, когда шаблон производителя объявил дефисы разделителями.
     """
-    if not serial:
+    if not serial or "-" not in serial:
         return serial
     compact = serial.replace("-", "")
-    if "-" in serial and DELL_PPID_RE.match(compact):
+    vendor = rules().match_serial(compact)
+    if vendor is not None and vendor.serial is not None and vendor.serial.hyphens_are_separators:
         return compact
     return serial
 
@@ -179,35 +145,48 @@ def display_serial(canonical: str | None, printed: str | None = None) -> str | N
     """Возвращает номер в том виде, в каком он напечатан на наклейке.
 
     Если OCR прочитал номер с дефисами и он сходится с машинным вариантом,
-    используется прочитанная разбивка, иначе группы расставляются по формату PPID.
+    используется прочитанная разбивка, иначе группы берутся из шаблона.
     """
     if not canonical:
         return canonical
     if printed and "-" in printed and printed.replace("-", "") == canonical:
         return printed
-    groups = PPID_GROUPS.get(len(canonical))
-    if groups is None or not DELL_PPID_RE.match(canonical):
+    vendor = rules().match_serial(canonical)
+    if vendor is None or vendor.serial is None:
         return canonical
-    parts = []
-    position = 0
-    for size in groups:
-        parts.append(canonical[position : position + size])
-        position += size
-    return "-".join(parts)
+    return vendor.serial.split_groups(canonical) or canonical
 
 
 def infer_brand_from_serial(serial: str | None) -> str | None:
     """Определяет бренд по формату идентификатора.
 
-    Dell печатает на шильдиках PPID, начинающийся с кода страны и кода детали,
-    поэтому по одному штрихкоду можно заполнить производителя без OCR.
+    Формат PPID узнаваем сам по себе, поэтому производителя видно даже когда с
+    фото удалось прочитать только штрихкод.
     """
-    if serial and 18 <= len(serial) <= 30 and DELL_PPID_RE.match(serial):
-        return "DELL"
-    return None
+    vendor = rules().match_serial(serial)
+    return vendor.brand if vendor else None
 
 
-def find_model_candidate(text: str, exclude: tuple[str | None, ...] = ()) -> str | None:
+def part_number(serial: str | None) -> tuple[str, str] | None:
+    """Возвращает пару (производитель, номер детали), если формат её содержит."""
+    vendor = rules().match_serial(serial)
+    if vendor is None or vendor.serial is None or serial is None:
+        return None
+    part = vendor.serial.extract_part_number(serial)
+    return (vendor.brand, part) if part else None
+
+
+def model_from_part(brand: str | None, part: str | None) -> str | None:
+    """Ищет модель по номеру детали в шаблоне производителя."""
+    vendor = rules().by_brand(brand)
+    if vendor is None or not part:
+        return None
+    return vendor.models_by_part.get(part.upper())
+
+
+def find_model_candidate(
+    text: str, exclude: tuple[str | None, ...] = (), brand: str | None = None
+) -> str | None:
     """Ищет обозначение модели, не опираясь на метку.
 
     На части шильдиков метка модели напечатана только на языке страны выпуска
@@ -215,17 +194,23 @@ def find_model_candidate(text: str, exclude: tuple[str | None, ...] = ()) -> str
     """
     if not text:
         return None
+    common = rules().common
+    vendor = rules().by_brand(brand)
+    shape = vendor.model_token if vendor and vendor.model_token else None
+
     corpus = clean_text(text)
     blocked = tuple(value for value in exclude if value)
     counts: dict[str, int] = {}
     positions: dict[str, int] = {}
-    for match in MODEL_TOKEN_RE.finditer(corpus):
+    for match in common.model_token.finditer(corpus):
         token = match.group(1)
-        if token in MODEL_STOPWORDS or token in BRANDS:
+        if token in common.model_stopwords or token in rules().brand_names:
+            continue
+        if shape is not None and not shape.fullmatch(token):
             continue
         if any(token in value for value in blocked):
             continue
-        if NOISE_LABELS.search(corpus[max(0, match.start() - 20) : match.start()]):
+        if common.noise_labels.search(corpus[max(0, match.start() - 20) : match.start()]):
             continue
         counts[token] = counts.get(token, 0) + 1
         positions.setdefault(token, match.start())
@@ -272,9 +257,21 @@ def repair_identifier(value: str | None, validator) -> tuple[str | None, bool]:
 
 
 def looks_like_noise(context: str, value: str) -> bool:
-    if MAC_RE.search(value):
+    if rules().common.mac_address.search(value):
         return True
     index = context.find(value)
     if index == -1:
         return False
-    return NOISE_LABELS.search(context[max(0, index - 20) : index]) is not None
+    return rules().common.noise_labels.search(context[max(0, index - 20) : index]) is not None
+
+
+def service_tag_label() -> re.Pattern[str]:
+    return rules().common.service_tag_label
+
+
+def serial_label() -> re.Pattern[str]:
+    return rules().common.serial_label
+
+
+def model_label() -> re.Pattern[str]:
+    return rules().common.model_label

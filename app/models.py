@@ -52,6 +52,8 @@ class Card:
     source: Source = Source.BARCODE
     confidence: Confidence = Confidence.LOW
     corrected_symbols: bool = False
+    # Модель взята не с этого снимка, а по номеру детали из накопленных данных.
+    model_inferred: bool = False
     raw_text: str | None = None
     duration_ms: int = 0
     notes: list[str] = field(default_factory=list)

@@ -54,8 +54,8 @@ def test_brand_matching_tolerates_one_error():
 
 def test_regex_extracts_dell_fields():
     text = nz.clean_text("Dell E2722H  Service Tag: 9YSCSF3  S/N: CN0Y71R3TV20019B13QT")
-    assert nz.SERVICE_TAG_RE.search(text).group(1) == "9YSCSF3"
-    assert nz.SERIAL_RE.search(text).group(1) == "CN0Y71R3TV20019B13QT"
+    assert nz.service_tag_label().search(text).group(1) == "9YSCSF3"
+    assert nz.serial_label().search(text).group(1) == "CN0Y71R3TV20019B13QT"
 
 
 def test_regex_tolerates_label_variants():
@@ -66,7 +66,7 @@ def test_regex_tolerates_label_variants():
         "SERIAL NUMBER: ABC12345",
     ]
     for variant in variants:
-        match = nz.SERIAL_RE.search(nz.clean_text(variant))
+        match = nz.serial_label().search(nz.clean_text(variant))
         assert match is not None and match.group(1) == "ABC12345", variant
 
 
@@ -80,7 +80,7 @@ def test_dell_ppid_reveals_brand():
 def test_sn_inside_a_word_is_not_a_label():
     # Реальный мусор OCR с наклейки энергоэффективности телевизора Samsung
     garbage = nz.clean_text("SHEPTTTHYECKAR SSNATSUNT ROROBNTENI UEAOHUTOOQU NEN")
-    assert nz.SERIAL_RE.search(garbage) is None
+    assert nz.serial_label().search(garbage) is None
 
 
 def test_mac_address_is_not_a_serial():

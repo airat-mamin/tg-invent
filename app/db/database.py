@@ -29,6 +29,14 @@ CREATE TABLE IF NOT EXISTS scans (
     duration_ms     INTEGER NOT NULL DEFAULT 0,
     location        TEXT
 );
+CREATE TABLE IF NOT EXISTS part_models (
+    brand       TEXT NOT NULL,
+    part        TEXT NOT NULL,
+    model       TEXT NOT NULL,
+    source      TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (brand, part)
+);
 CREATE INDEX IF NOT EXISTS idx_scans_serial  ON scans (serial_number);
 CREATE INDEX IF NOT EXISTS idx_scans_tag     ON scans (service_tag);
 CREATE INDEX IF NOT EXISTS idx_scans_user    ON scans (tg_user_id);
@@ -189,6 +197,52 @@ class Database:
         )
         async with self.conn.execute(query, params) as cursor:
             return [dict(row) for row in await cursor.fetchall()]
+
+    async def get_part_model(self, brand: str, part: str) -> str | None:
+        async with self.conn.execute(
+            "SELECT model FROM part_models WHERE brand = ? AND part = ?",
+            (brand.upper(), part.upper()),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return row["model"] if row else None
+
+    async def set_part_model(self, brand: str, part: str, model: str, source: str) -> bool:
+        """Запоминает соответствие. Ручная правка пользователя приоритетнее накопленной."""
+        async with self.conn.execute(
+            "SELECT model, source FROM part_models WHERE brand = ? AND part = ?",
+            (brand.upper(), part.upper()),
+        ) as cursor:
+            existing = await cursor.fetchone()
+        if existing is not None:
+            if existing["model"] == model.upper():
+                return False
+            if existing["source"] == "manual" and source != "manual":
+                return False
+        await self.conn.execute(
+            """
+            INSERT INTO part_models (brand, part, model, source, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (brand, part) DO UPDATE
+                SET model = excluded.model,
+                    source = excluded.source,
+                    updated_at = excluded.updated_at
+            """,
+            (
+                brand.upper(),
+                part.upper(),
+                model.upper(),
+                source,
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            ),
+        )
+        await self.conn.commit()
+        return True
+
+    async def list_part_models(self) -> list[aiosqlite.Row]:
+        async with self.conn.execute(
+            "SELECT brand, part, model, source, updated_at FROM part_models ORDER BY brand, part"
+        ) as cursor:
+            return list(await cursor.fetchall())
 
     async def stats(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

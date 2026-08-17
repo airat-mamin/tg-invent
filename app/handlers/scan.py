@@ -11,7 +11,7 @@ from app.config import settings
 from app.db.database import Database
 from app.keyboards.inline import confirmation
 from app.models import Card, Confidence, Source, Status
-from app.services import pipeline
+from app.services import parts, pipeline
 
 logger = logging.getLogger(__name__)
 router = Router(name="scan")
@@ -111,6 +111,7 @@ async def _process(message: Message, bot: Bot, db: Database, file_id: str, size:
         await status_message.edit_text(failure)
         return
 
+    await parts.fill_model(result.card, db)
     image_path = _store_image(raw, message.from_user.id)
     scan_id = await db.add_scan(
         result.card,

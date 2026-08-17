@@ -23,6 +23,7 @@ RUN if [ "$WITH_OCR" = "true" ]; then \
     fi
 
 COPY app ./app
+COPY templates ./templates
 
 RUN useradd --create-home --uid 1000 bot && mkdir -p /data && chown -R bot:bot /data /app
 USER bot

@@ -14,7 +14,7 @@ from app.handlers import commands, edit, errors, scan
 from app.logging_setup import setup_logging
 from app.middlewares.access import AccessMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
-from app.services import barcode, ocr, vlm
+from app.services import barcode, normalize, ocr, vlm
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,13 @@ def build_dispatcher(db: Database) -> Dispatcher:
 
 
 async def _warmup() -> None:
+    # Шаблоны читаются первыми: ошибка в конфигурации должна останавливать запуск,
+    # а не всплывать на первом же присланном фото.
+    registry = normalize.rules()
+    logger.info(
+        "Шаблоны производителей: %s",
+        ", ".join(vendor.brand for vendor in registry.vendors) or "только общие правила",
+    )
     logger.info(
         "Контур №0 (штрихкоды): %s", "включён" if barcode.available() else "недоступен"
     )

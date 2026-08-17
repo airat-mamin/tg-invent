@@ -10,6 +10,7 @@ from app.db.database import Database, row_to_card
 from app.keyboards.inline import confirmation, field_choice
 from app.models import FIELD_TITLES, Status
 from app.services import normalize as nz
+from app.services import parts
 
 logger = logging.getLogger(__name__)
 router = Router(name="edit")
@@ -65,6 +66,9 @@ async def _finalize(
         return
 
     await db.set_status(scan_id, status)
+    # Подтверждённая карточка — источник соответствия «номер детали → модель»
+    # для всех таких же устройств, где модель на фото не прочитается.
+    await parts.remember(row_to_card(row), db, parts.LEARNED)
     duplicate = await db.find_duplicate(row["serial_number"], row["service_tag"], scan_id)
 
     text = _render_row(row)
@@ -130,6 +134,8 @@ async def on_value(message: Message, state: FSMContext, db: Database) -> None:
     await state.set_state(None)
 
     row = await db.get_scan(scan_id)
+    if field == "model" and value:
+        await parts.remember(row_to_card(row), db, parts.MANUAL)
     await message.answer(_render_row(row), reply_markup=field_choice(scan_id, row_to_card(row)))
 
 

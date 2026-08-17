@@ -11,13 +11,13 @@ from app.services import normalize as nz
 logger = logging.getLogger(__name__)
 
 
-def _model_from_text(text: str, exclude: tuple[str | None, ...]) -> str | None:
-    match = nz.MODEL_RE.search(text)
+def _model_from_text(text: str, exclude: tuple[str | None, ...], brand: str | None) -> str | None:
+    match = nz.model_label().search(nz.clean_text(text))
     if match is not None:
         model = nz.normalize_value(match.group(1))
         if nz.is_valid_model(model):
             return model
-    return nz.find_model_candidate(text, exclude=exclude)
+    return nz.find_model_candidate(text, exclude=exclude, brand=brand)
 
 
 @dataclass
@@ -47,7 +47,9 @@ def _run_fast_contours(raw: bytes) -> tuple[Card | None, Card, str | None]:
             if ocr_text:
                 card.brand = card.brand or nz.match_brand(ocr_text)
                 card.model = _model_from_text(
-                    ocr_text, exclude=(card.serial_number, card.service_tag)
+                    ocr_text,
+                    exclude=(card.serial_number, card.service_tag),
+                    brand=card.brand,
                 )
         return card, draft, None
 

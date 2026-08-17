@@ -53,8 +53,12 @@ def render_card(card: Card) -> str:
         # его удобнее сверять глазами, чем сплошную строку из штрихкода.
         value = card.serial_display or card.serial_number if field == "serial_number" else None
         value = value or getattr(card, field)
-        if value:
-            lines.append(f"• {title}: <code>{escape(str(value))}</code>")
+        if not value:
+            continue
+        line = f"• {title}: <code>{escape(str(value))}</code>"
+        if field == "model" and card.model_inferred:
+            line += " <i>(по номеру детали)</i>"
+        lines.append(line)
     lines.append("")
     if card.confidence is not Confidence.HIGH or card.corrected_symbols:
         lines.append(LOW_CONFIDENCE_WARNING)

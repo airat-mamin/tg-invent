@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     ollama_timeout: int = 60
     max_concurrent_vlm: int = 1
 
+    templates_dir: Path = Path(__file__).resolve().parents[1] / "templates"
+
     db_path: Path = Path("data/bot.db")
     store_images: bool = False
     image_dir: Path = Path("data/images")
