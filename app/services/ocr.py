@@ -243,9 +243,12 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
     serial_fixed = serial_fixed or serial_polished
     printed_serial = serial
     serial = nz.canonical_serial(serial)
-    if serial is not None and len(serial) < MIN_OCR_SERIAL_LENGTH:
-        # Короткие «номера» из OCR почти всегда оказываются обрывком мусорного текста;
-        # со штрихкода короткие значения принимаются, там источник надёжный.
+    if serial is not None and (
+        len(serial) < MIN_OCR_SERIAL_LENGTH or nz.is_truncated_serial(serial)
+    ):
+        # Короткие «номера» из OCR почти всегда оказываются обрывком мусорного текста,
+        # а обрыв на середине известного формата означает потерянное продолжение.
+        # Со штрихкода короткие значения принимаются: там источник надёжный.
         serial, printed_serial, serial_fixed = None, None, serial_fixed and bool(tag)
     brand = nz.match_brand(corpus) or nz.infer_brand_from_serial(serial)
     model = nz.normalize_value(find(nz.model_label(), MODEL_LABEL))

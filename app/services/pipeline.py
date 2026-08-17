@@ -40,13 +40,15 @@ def _run_fast_contours(raw: bytes) -> tuple[Card | None, Card, str | None]:
 
     card = barcode.scan(variants)
     if card is not None:
-        card.brand = nz.infer_brand_from_serial(card.serial_number)
-        if settings.ocr_enrich_after_barcode and ocr.engine.enabled:
-            # Штрихкод не содержит модель, поэтому по запросу дочитываем её OCR.
+        card.brand = card.brand or nz.infer_brand_from_serial(card.serial_number)
+        needs_enrichment = not (card.brand and card.model)
+        if needs_enrichment and settings.ocr_enrich_after_barcode and ocr.engine.enabled:
+            # Штрихкод не всегда содержит модель, поэтому по запросу дочитываем её OCR.
+            # Значения из штрихкода при этом не трогаем: там источник надёжнее.
             _, ocr_text = ocr.scan(variants)
             if ocr_text:
                 card.brand = card.brand or nz.match_brand(ocr_text)
-                card.model = _model_from_text(
+                card.model = card.model or _model_from_text(
                     ocr_text,
                     exclude=(card.serial_number, card.service_tag),
                     brand=card.brand,

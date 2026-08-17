@@ -1,5 +1,6 @@
 import logging
 
+import cv2
 import numpy as np
 
 from app.models import Card, Confidence, Source
@@ -7,6 +8,8 @@ from app.services import normalize as nz
 from app.services.preprocess import ImageVariants, rotations
 
 logger = logging.getLogger(__name__)
+
+UPSCALE_STEPS = (1, 2, 3)
 
 try:
     import zxingcpp
@@ -45,16 +48,28 @@ def _decode_one(image: np.ndarray) -> list[str]:
 
 
 def decode_all(variants: ImageVariants) -> list[str]:
-    """Пробует декодировать коды на всех вариантах изображения и поворотах."""
+    """Пробует декодировать коды на всех вариантах изображения, масштабах и поворотах.
+
+    Увеличение обязательно: на снимке 1280x720, где наклейка занимает четверть
+    кадра, штрихи оказываются уже пикселя и декодер их не видит, хотя после
+    двукратного апскейла код читается без ошибок. Декодирование дешёвое,
+    поэтому масштабы перебираются от меньшего к большему до первой удачи.
+    """
     seen: list[str] = []
-    for image in variants.for_barcode():
-        for rotated in rotations(image):
-            for text in _decode_one(rotated):
-                value = text.strip()
-                if value and value not in seen:
-                    seen.append(value)
-        if seen:
-            break
+    for scale in UPSCALE_STEPS:
+        for image in variants.for_barcode():
+            scaled = (
+                image
+                if scale == 1
+                else cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            )
+            for rotated in rotations(scaled):
+                for text in _decode_one(rotated):
+                    value = text.strip()
+                    if value and value not in seen:
+                        seen.append(value)
+            if seen:
+                return seen
     return seen
 
 
@@ -67,6 +82,8 @@ def scan(variants: ImageVariants) -> Card | None:
 
     service_tag: str | None = None
     serial: str | None = None
+    model: str | None = None
+    brand: str | None = None
     for payload in payloads:
         value = nz.normalize_identifier(payload)
         if value is None:
@@ -76,6 +93,13 @@ def scan(variants: ImageVariants) -> Card | None:
             continue
         if nz.is_valid_serial(value) and (serial is None or len(value) > len(serial)):
             serial = value
+            continue
+        # На части наклеек рядом с серийным номером штрихкодом продублирована
+        # модель — её форма описана в шаблоне производителя.
+        if model is None:
+            match = nz.match_model_shape(value)
+            if match is not None:
+                brand, model = match
 
     if service_tag is None and serial is None:
         return None
@@ -85,8 +109,8 @@ def scan(variants: ImageVariants) -> Card | None:
 
     serial = nz.canonical_serial(serial)
     return Card(
-        brand=None,
-        model=None,
+        brand=brand,
+        model=model,
         serial_number=serial,
         serial_display=nz.display_serial(serial),
         service_tag=service_tag,

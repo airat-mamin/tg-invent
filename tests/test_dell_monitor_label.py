@@ -63,6 +63,16 @@ def test_hyphenated_ppid_reveals_dell():
     assert nz.infer_brand_from_serial("CN-0Y71R3-TV200-19B-1EHT-A01") == "DELL"
 
 
+def test_serial_broken_off_mid_format_is_rejected():
+    # OCR читает двоеточие вместо дефиса и теряет продолжение PPID
+    assert nz.is_truncated_serial("CN-0J0XYN") is True
+    assert nz.is_truncated_serial("CN-0J0XYN-WS200-882-ANWS-A08") is False
+    assert nz.is_truncated_serial("ABC12345") is False
+
+    blocks = [line("S/N: CN-0J0XYN:", 0), line("MADE IN CHINA", 1)]
+    assert parse_blocks(blocks) is None
+
+
 def test_letter_o_after_country_code_becomes_zero():
     assert nz.polish_serial("CN-OY71R3-TV200-19B-1EHT-A01") == (
         "CN-0Y71R3-TV200-19B-1EHT-A01",

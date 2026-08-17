@@ -77,7 +77,7 @@ def is_valid_serial(value: str | None) -> bool:
 def is_valid_model(value: str | None) -> bool:
     if not value or not (2 <= len(value) <= 25):
         return False
-    if value in rules().brand_names:
+    if value in rules().brand_names or value in rules().common.model_stopwords:
         return False
     return rules().common.valid_model.fullmatch(value) is not None
 
@@ -167,6 +167,34 @@ def infer_brand_from_serial(serial: str | None) -> str | None:
     return vendor.brand if vendor else None
 
 
+def is_truncated_serial(value: str | None) -> bool:
+    """Проверяет, не оборвано ли значение на середине известного формата.
+
+    OCR легко теряет продолжение длинного номера: на месте дефиса он читает
+    двоеточие, и от PPID остаётся только первая группа. Такой обрывок проходит
+    общую валидацию, но с точки зрения формата производителя он неполон.
+    """
+    if not value:
+        return False
+    for vendor in rules().vendors:
+        serial = vendor.serial
+        if serial is None or serial.part_number is None or serial.matches(value):
+            continue
+        # Обрывок проверяется и после правок OCR: сами по себе они не применяются,
+        # потому что неполное значение всё равно не сойдётся с форматом целиком.
+        variants = [value] + [fix.pattern.sub(fix.replacement, value) for fix in serial.fixes]
+        match = next(
+            (found for found in (serial.part_number.match(item) for item in variants) if found),
+            None,
+        )
+        # Значение оборвано, если после номера детали ничего не осталось, а формат
+        # производителя требует продолжения. Если хвост есть, это чужой номер,
+        # случайно похожий на начало формата.
+        if match and len(value) - match.end() <= 2 and len(value) < serial.min_length:
+            return True
+    return False
+
+
 def part_number(serial: str | None) -> tuple[str, str] | None:
     """Возвращает пару (производитель, номер детали), если формат её содержит."""
     vendor = rules().match_serial(serial)
@@ -174,6 +202,23 @@ def part_number(serial: str | None) -> tuple[str, str] | None:
         return None
     part = vendor.serial.extract_part_number(serial)
     return (vendor.brand, part) if part else None
+
+
+def match_model_shape(value: str | None) -> tuple[str, str] | None:
+    """Опознаёт обозначение модели по форме, описанной в шаблоне производителя.
+
+    Возвращает пару (производитель, модель). Применяется к значениям, про которые
+    заранее неизвестно, что это: например, к содержимому штрихкода.
+    """
+    if not value:
+        return None
+    candidate = value.upper()
+    if not is_valid_model(candidate):
+        return None
+    for vendor in rules().vendors:
+        if vendor.model_token is not None and vendor.model_token.fullmatch(candidate):
+            return vendor.brand, candidate
+    return None
 
 
 def model_from_part(brand: str | None, part: str | None) -> str | None:
