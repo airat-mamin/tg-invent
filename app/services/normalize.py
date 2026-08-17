@@ -57,7 +57,9 @@ SERVICE_TAG_RE = re.compile(
     r"(?:SERVICE\s*TAG|\bS[/\\.]?T\b)\s*[:.#№]?\s*([A-Z0-9]{7})\b"
 )
 SERIAL_RE = re.compile(
-    r"(?:S[/\\.\s]?N|SERIAL\s*(?:NO\.?|NUMBER|NUM)?|序列号|序号)"
+    # Границы слова обязательны: без них «SN» находится внутри мусорного текста
+    # OCR вроде «SSNATSUNT», и из шума собирается правдоподобный серийный номер.
+    r"(?:\bS[/\\.\s]?N\b|\bSERIAL\s*(?:NO\.?|NUMBER|NUM)?|序列号|序号)"
     r"\s*[:.#№]?\s*([A-Z0-9][A-Z0-9-]{4,29})\b"
 )
 MODEL_RE = re.compile(

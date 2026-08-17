@@ -7,6 +7,7 @@ class Source(StrEnum):
     OCR = "ocr"
     VLM = "vlm"
     MANUAL = "manual"
+    NONE = "none"
 
 
 class Confidence(StrEnum):
@@ -34,6 +35,7 @@ SOURCE_TITLES = {
     Source.OCR: "OCR",
     Source.VLM: "нейросеть",
     Source.MANUAL: "ручной ввод",
+    Source.NONE: "не распознано",
 }
 
 

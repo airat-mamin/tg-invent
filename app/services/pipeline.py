@@ -26,6 +26,7 @@ class PipelineResult:
     error: str | None = None
     warning: str | None = None
     duration_ms: int = 0
+    raw_text: str | None = None
 
 
 def _run_fast_contours(raw: bytes) -> tuple[Card | None, Card, str | None]:
@@ -84,4 +85,5 @@ async def process(raw: bytes) -> PipelineResult:
         card=card,
         warning=warning,
         duration_ms=int((time.monotonic() - started) * 1000),
+        raw_text=draft.raw_text,
     )

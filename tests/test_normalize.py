@@ -77,6 +77,12 @@ def test_dell_ppid_reveals_brand():
     assert nz.infer_brand_from_serial(None) is None
 
 
+def test_sn_inside_a_word_is_not_a_label():
+    # Реальный мусор OCR с наклейки энергоэффективности телевизора Samsung
+    garbage = nz.clean_text("SHEPTTTHYECKAR SSNATSUNT ROROBNTENI UEAOHUTOOQU NEN")
+    assert nz.SERIAL_RE.search(garbage) is None
+
+
 def test_mac_address_is_not_a_serial():
     text = nz.clean_text("MAC: 00:1A:2B:3C:4D:5E")
     assert nz.looks_like_noise(text, "00:1A:2B:3C:4D:5E".upper())

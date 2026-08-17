@@ -10,7 +10,7 @@ from app import texts
 from app.config import settings
 from app.db.database import Database
 from app.keyboards.inline import confirmation
-from app.models import Status
+from app.models import Card, Confidence, Source, Status
 from app.services import pipeline
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,28 @@ async def _process(message: Message, bot: Bot, db: Database, file_id: str, size:
         return
 
     if result.card is None:
+        # Неудачные попытки сохраняются вместе со снимком: без них невозможно
+        # ни посчитать долю отказов, ни разобрать, почему наклейка не прочиталась.
+        image_path = _store_image(raw, message.from_user.id)
+        await db.add_scan(
+            Card(
+                source=Source.NONE,
+                confidence=Confidence.LOW,
+                raw_text=result.raw_text,
+                duration_ms=result.duration_ms,
+            ),
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+            status=Status.DISCARDED,
+            image_path=image_path,
+        )
+        logger.info(
+            "Не распознано: user=%s за %s мс, снимок %s, текст OCR: %.200r",
+            message.from_user.id,
+            result.duration_ms,
+            image_path or "не сохранён",
+            result.raw_text or "",
+        )
         failure = texts.FAILURE
         if result.warning == "vlm_unavailable":
             failure = f"{texts.VLM_UNAVAILABLE}\n\n{failure}"

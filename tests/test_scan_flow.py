@@ -82,7 +82,14 @@ async def test_unreadable_photo_reports_failure(db):
 
     text = status_message.edit_text.await_args.args[0]
     assert "Не удалось распознать" in text
-    assert await db.get_scan(1) is None
+
+    # Отказ фиксируется в базе: без этого нельзя посчитать долю неудач
+    row = await db.get_scan(1)
+    assert row["status"] == Status.DISCARDED
+    assert row["source"] == "none"
+    assert row["serial_number"] is None
+    # В выгрузку подтверждённых записей отказы не попадают
+    assert await db.export_rows(user_id=42, since=None) == []
 
 
 async def test_broken_file_reports_decode_error(db):

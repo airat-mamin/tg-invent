@@ -20,6 +20,8 @@ MODEL_LABEL = re.compile(r"(?:MODEL(?:\s*(?:NO\.?|NAME))?|\bMDL\b)\s*[:.#№]?\s
 # Перенос длинного идентификатора на следующую строку; тильду даёт OCR вместо дефиса.
 CONTINUATION_CHARS = "-~–—"
 
+MIN_OCR_SERIAL_LENGTH = 8
+
 
 @dataclass
 class Block:
@@ -241,6 +243,10 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
     serial_fixed = serial_fixed or serial_polished
     printed_serial = serial
     serial = nz.canonical_serial(serial)
+    if serial is not None and len(serial) < MIN_OCR_SERIAL_LENGTH:
+        # Короткие «номера» из OCR почти всегда оказываются обрывком мусорного текста;
+        # со штрихкода короткие значения принимаются, там источник надёжный.
+        serial, printed_serial, serial_fixed = None, None, serial_fixed and bool(tag)
     model = nz.normalize_value(find(nz.MODEL_RE, MODEL_LABEL))
     if not nz.is_valid_model(model):
         model = nz.find_model_candidate(corpus, exclude=(serial, tag))
