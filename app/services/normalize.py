@@ -52,14 +52,22 @@ CONFUSABLES = {
 }
 
 SERVICE_TAG_RE = re.compile(
-    r"(?:SERVICE\s*TAG|SERVICE\s*CODE|EXPRESS\s*SERVICE\s*CODE|\bS[/\\.]?T\b)"
-    r"\s*[:.#№]?\s*([A-Z0-9]{7})\b"
+    # «Service Code» намеренно не поддерживается: на шильдиках Dell так начинается
+    # Express Service Code — числовой код, а не сервисный тег.
+    r"(?:SERVICE\s*TAG|\bS[/\\.]?T\b)\s*[:.#№]?\s*([A-Z0-9]{7})\b"
 )
 SERIAL_RE = re.compile(
-    r"(?:S[/\\.\s]?N|SERIAL\s*(?:NO\.?|NUMBER|NUM)?)\s*[:.#№]?\s*([A-Z0-9][A-Z0-9-]{4,29})\b"
+    r"(?:S[/\\.\s]?N|SERIAL\s*(?:NO\.?|NUMBER|NUM)?|序列号|序号)"
+    r"\s*[:.#№]?\s*([A-Z0-9][A-Z0-9-]{4,29})\b"
 )
 MODEL_RE = re.compile(
-    r"(?:MODEL(?:\s*(?:NO\.?|NAME))?|\bMDL\b)\s*[:.#№]?\s*([A-Z0-9][A-Z0-9\-/]{1,23})\b"
+    r"(?:MODEL(?:\s*(?:NO\.?|NAME))?|\bMDL\b|型号|型號)\s*[:.#№]?\s*([A-Z0-9][A-Z0-9\-/]{1,23})\b"
+)
+
+# Типовая форма обозначения модели монитора или ПК: E2722H, U2723QE, P2419HC, T3600.
+MODEL_TOKEN_RE = re.compile(r"\b([A-Z]{1,3}\d{3,4}[A-Z]{0,4})\b")
+MODEL_STOPWORDS = frozenset(
+    {"CCC", "CE", "FCC", "EAC", "HF", "XY", "AC", "DC", "HZ", "USB", "HDMI", "LED", "LCD"}
 )
 
 MAC_RE = re.compile(r"\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b")
@@ -129,18 +137,61 @@ def match_brand(text: str | None) -> str | None:
     return None
 
 
-DELL_PPID_RE = re.compile(r"^CN0[A-Z0-9]{5}[A-Z0-9]{5,}$")
+# PPID Dell печатается двумя способами: слитно (CN011PWC…) и через дефисы (CN-0Y71R3-TV200-…).
+# Первые два символа — код страны сборки, следом всегда идёт цифра.
+DELL_COUNTRIES = "CN|MY|TW|SG|MX|BR|IN|PH|TH|CZ|IE"
+DELL_PPID_RE = re.compile(rf"^(?:{DELL_COUNTRIES})-?0[A-Z0-9]{{5}}-?[A-Z0-9-]{{5,}}$")
+PPID_LETTER_O_RE = re.compile(rf"^((?:{DELL_COUNTRIES})-?)O")
+
+
+def polish_serial(serial: str | None) -> tuple[str | None, bool]:
+    """Исправляет типичную ошибку OCR в PPID: букву O вместо нуля после кода страны."""
+    if not serial or DELL_PPID_RE.match(serial):
+        return serial, False
+    candidate = PPID_LETTER_O_RE.sub(r"\g<1>0", serial)
+    if candidate != serial and DELL_PPID_RE.match(candidate):
+        return candidate, True
+    return serial, False
 
 
 def infer_brand_from_serial(serial: str | None) -> str | None:
     """Определяет бренд по формату идентификатора.
 
-    Dell печатает на шильдиках PPID вида CN0<5 символов кода детали>…,
+    Dell печатает на шильдиках PPID, начинающийся с кода страны и кода детали,
     поэтому по одному штрихкоду можно заполнить производителя без OCR.
     """
-    if serial and 18 <= len(serial) <= 25 and DELL_PPID_RE.match(serial):
+    if serial and 18 <= len(serial) <= 30 and DELL_PPID_RE.match(serial):
         return "DELL"
     return None
+
+
+def find_model_candidate(text: str, exclude: tuple[str | None, ...] = ()) -> str | None:
+    """Ищет обозначение модели, не опираясь на метку.
+
+    На части шильдиков метка модели напечатана только на языке страны выпуска
+    (например, 型号), зато само обозначение продублировано в углу наклейки.
+    """
+    if not text:
+        return None
+    corpus = clean_text(text)
+    blocked = tuple(value for value in exclude if value)
+    counts: dict[str, int] = {}
+    positions: dict[str, int] = {}
+    for match in MODEL_TOKEN_RE.finditer(corpus):
+        token = match.group(1)
+        if token in MODEL_STOPWORDS or token in BRANDS:
+            continue
+        if any(token in value for value in blocked):
+            continue
+        if NOISE_LABELS.search(corpus[max(0, match.start() - 20) : match.start()]):
+            continue
+        counts[token] = counts.get(token, 0) + 1
+        positions.setdefault(token, match.start())
+    if not counts:
+        return None
+    # Обозначение модели обычно повторяется на наклейке дважды, это лучший признак.
+    best = max(counts, key=lambda token: (counts[token], -positions[token]))
+    return best if is_valid_model(best) else None
 
 
 def _confusable_candidates(value: str, limit: int = 64) -> list[str]:

@@ -46,6 +46,8 @@ def extract_json(text: str) -> dict | None:
 def card_from_payload(payload: dict, raw: str) -> Card | None:
     tag, tag_fixed = nz.repair_identifier(payload.get("service_tag"), nz.is_valid_service_tag)
     serial, serial_fixed = nz.repair_identifier(payload.get("serial_number"), nz.is_valid_serial)
+    serial, serial_polished = nz.polish_serial(serial)
+    serial_fixed = serial_fixed or serial_polished
     model = nz.normalize_value(payload.get("model"))
     if not nz.is_valid_model(model):
         model = None

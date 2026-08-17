@@ -2,6 +2,7 @@ import logging
 import re
 import threading
 from dataclasses import dataclass
+from statistics import median
 
 import numpy as np
 
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 SERIAL_LABEL = re.compile(r"(?:S[/\\.\s]?N|SERIAL)\s*[:.#№]?\s*$")
 TAG_LABEL = re.compile(r"(?:SERVICE\s*TAG|SERVICE\s*CODE|\bS[/\\.]?T)\s*[:.#№]?\s*$")
 MODEL_LABEL = re.compile(r"(?:MODEL(?:\s*(?:NO\.?|NAME))?|\bMDL\b)\s*[:.#№]?\s*$")
+
+# Перенос длинного идентификатора на следующую строку; тильду даёт OCR вместо дефиса.
+CONTINUATION_CHARS = "-~–—"
 
 
 @dataclass
@@ -129,10 +133,92 @@ def _search_by_labels(blocks: list[Block], pattern: re.Pattern[str]) -> str | No
     return None
 
 
-def parse_blocks(blocks: list[Block]) -> Card | None:
+def _merge(first: Block, second: Block, separator: str) -> Block:
+    return Block(
+        text=f"{first.text}{separator}{second.text}",
+        confidence=min(first.confidence, second.confidence),
+        x1=min(first.x1, second.x1),
+        y1=min(first.y1, second.y1),
+        x2=max(first.x2, second.x2),
+        y2=max(first.y2, second.y2),
+    )
+
+
+def _continuation_parent(blocks: list[Block], block: Block, height: float) -> Block | None:
+    """Находит строку, продолжением которой является блок, начинающийся с дефиса."""
+    candidates = [
+        candidate
+        for candidate in blocks
+        if abs(candidate.x1 - block.x1) <= height * 1.5
+        and 0 <= block.y1 - candidate.y2 <= height * 2
+    ]
+    return max(candidates, key=lambda candidate: candidate.y2) if candidates else None
+
+
+def group_blocks(blocks: list[Block]) -> list[Block]:
+    """Приводит блоки к порядку чтения и склеивает разорванные надписи.
+
+    EasyOCR возвращает блоки в порядке детекции и дробит текст по пробелам, поэтому
+    метка «Service Tag:» может приехать двумя кусками, а длинный S/N Dell — тремя
+    строками вида «CN-0Y71R3», «-TV200-19B-1EHT», «-A01».
+    """
     if not blocks:
+        return []
+    height = median(block.height for block in blocks)
+    normalized = [
+        Block(
+            text=nz.clean_text(block.text).strip(),
+            confidence=block.confidence,
+            x1=block.x1,
+            y1=block.y1,
+            x2=block.x2,
+            y2=block.y2,
+        )
+        for block in blocks
+        if block.text.strip()
+    ]
+
+    rows: list[list[Block]] = []
+    for block in sorted(normalized, key=lambda item: item.center_y):
+        if rows and abs(block.center_y - rows[-1][0].center_y) <= height * 0.6:
+            rows[-1].append(block)
+        else:
+            rows.append([block])
+
+    grouped: list[Block] = []
+    for row in rows:
+        row.sort(key=lambda item: item.x1)
+        line = [row[0]]
+        for block in row[1:]:
+            # Соседние куски одной надписи стоят вплотную, соседние колонки — далеко.
+            if block.x1 - line[-1].x2 <= height * 1.2:
+                line[-1] = _merge(line[-1], block, " ")
+            else:
+                line.append(block)
+
+        for block in line:
+            if block.text[:1] in CONTINUATION_CHARS and grouped:
+                parent = _continuation_parent(grouped, block, height)
+                if parent is not None:
+                    tail = Block(
+                        text="-" + block.text[1:],
+                        confidence=block.confidence,
+                        x1=block.x1,
+                        y1=block.y1,
+                        x2=block.x2,
+                        y2=block.y2,
+                    )
+                    grouped[grouped.index(parent)] = _merge(parent, tail, "")
+                    continue
+            grouped.append(block)
+    return grouped
+
+
+def parse_blocks(raw_blocks: list[Block]) -> Card | None:
+    if not raw_blocks:
         return None
 
+    blocks = group_blocks(raw_blocks)
     inline = nz.clean_text(" ".join(block.text for block in blocks))
     multiline = nz.clean_text("\n".join(block.text for block in blocks))
     corpus = f"{inline}\n{multiline}"
@@ -151,9 +237,11 @@ def parse_blocks(blocks: list[Block]) -> Card | None:
     serial, serial_fixed = nz.repair_identifier(
         find(nz.SERIAL_RE, SERIAL_LABEL), nz.is_valid_serial
     )
+    serial, serial_polished = nz.polish_serial(serial)
+    serial_fixed = serial_fixed or serial_polished
     model = nz.normalize_value(find(nz.MODEL_RE, MODEL_LABEL))
     if not nz.is_valid_model(model):
-        model = None
+        model = nz.find_model_candidate(corpus, exclude=(serial, tag))
 
     if not (serial or tag):
         return None
