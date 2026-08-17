@@ -3,6 +3,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.models import FIELD_TITLES, Card
 
+COPY_BUTTON_PREFIX = "📋 S/N без дефисов: "
+# Длинную подпись клиенты Telegram обрезают, поэтому номер выносим в подпись
+# только пока она умещается целиком.
+MAX_BUTTON_LABEL = 64
+
 
 def _copy_serial_button(card: Card | None) -> InlineKeyboardButton | None:
     """Кнопка копирует номер без дефисов, тогда как в тексте он показан с ними."""
@@ -10,9 +15,10 @@ def _copy_serial_button(card: Card | None) -> InlineKeyboardButton | None:
         return None
     if not card.serial_display or card.serial_display == card.serial_number:
         return None
-    return InlineKeyboardButton(
-        text="📋 S/N без дефисов", copy_text=CopyTextButton(text=card.serial_number)
-    )
+    label = f"{COPY_BUTTON_PREFIX}{card.serial_number}"
+    if len(label) > MAX_BUTTON_LABEL:
+        label = COPY_BUTTON_PREFIX.rstrip(": ")
+    return InlineKeyboardButton(text=label, copy_text=CopyTextButton(text=card.serial_number))
 
 
 def confirmation(scan_id: int, card: Card | None = None) -> InlineKeyboardMarkup:

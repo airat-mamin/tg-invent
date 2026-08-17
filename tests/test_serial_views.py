@@ -41,6 +41,15 @@ def test_copy_button_carries_compact_value():
     markup = confirmation(1, Card(serial_number=COMPACT, serial_display=PRINTED))
     button = markup.inline_keyboard[0][0]
     assert button.copy_text.text == COMPACT
+    assert button.text.endswith(COMPACT)
+
+
+def test_long_serial_falls_back_to_short_label():
+    long_serial = "X" * 40 + "1"
+    markup = confirmation(1, Card(serial_number=long_serial, serial_display=f"X-{long_serial}"))
+    button = markup.inline_keyboard[0][0]
+    assert button.copy_text.text == long_serial
+    assert len(button.text) <= 64
 
 
 def test_copy_button_is_absent_when_forms_match():
