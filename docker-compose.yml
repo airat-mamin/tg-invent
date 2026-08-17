@@ -1,0 +1,37 @@
+services:
+  bot:
+    build:
+      context: .
+      args:
+        WITH_OCR: "${WITH_OCR:-false}"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /data/bot.db
+      IMAGE_DIR: /data/images
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - bot-data:/data
+    depends_on:
+      - ollama
+
+  # Контур №2. Требует GPU >= 10 ГБ VRAM и NVIDIA Container Toolkit на хосте.
+  # Без GPU оставьте VLM_ENABLED=false в .env — бот будет работать на контурах №0 и №1.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  bot-data:
+  ollama-models:
