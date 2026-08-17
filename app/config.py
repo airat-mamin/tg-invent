@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     ocr_enabled: bool = True
     ocr_langs: str = "en"
+    # Штрихкод не содержит модель: флаг разрешает дочитать её через OCR ценой времени ответа.
+    ocr_enrich_after_barcode: bool = False
 
     vlm_enabled: bool = False
     ollama_host: str = "http://localhost:11434"

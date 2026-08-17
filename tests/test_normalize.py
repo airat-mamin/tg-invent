@@ -70,6 +70,13 @@ def test_regex_tolerates_label_variants():
         assert match is not None and match.group(1) == "ABC12345", variant
 
 
+def test_dell_ppid_reveals_brand():
+    assert nz.infer_brand_from_serial("CN011PWCWSL001B9BF8BA05") == "DELL"
+    assert nz.infer_brand_from_serial("CN0DMCK5WSL0028NCA4UA03") == "DELL"
+    assert nz.infer_brand_from_serial("ABC12345") is None
+    assert nz.infer_brand_from_serial(None) is None
+
+
 def test_mac_address_is_not_a_serial():
     text = nz.clean_text("MAC: 00:1A:2B:3C:4D:5E")
     assert nz.looks_like_noise(text, "00:1A:2B:3C:4D:5E".upper())

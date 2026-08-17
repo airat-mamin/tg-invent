@@ -3,11 +3,20 @@ import logging
 import time
 from dataclasses import dataclass
 
+from app.config import settings
 from app.models import Card
 from app.services import barcode, ocr, preprocess, vlm
 from app.services import normalize as nz
 
 logger = logging.getLogger(__name__)
+
+
+def _model_from_text(text: str) -> str | None:
+    match = nz.MODEL_RE.search(text)
+    if match is None:
+        return None
+    model = nz.normalize_value(match.group(1))
+    return model if nz.is_valid_model(model) else None
 
 
 @dataclass
@@ -29,6 +38,13 @@ def _run_fast_contours(raw: bytes) -> tuple[Card | None, Card, str | None]:
 
     card = barcode.scan(variants)
     if card is not None:
+        card.brand = nz.infer_brand_from_serial(card.serial_number)
+        if settings.ocr_enrich_after_barcode and ocr.engine.enabled:
+            # Штрихкод не содержит модель, поэтому по запросу дочитываем её OCR.
+            _, ocr_text = ocr.scan(variants)
+            if ocr_text:
+                card.brand = card.brand or nz.match_brand(ocr_text)
+                card.model = _model_from_text(ocr_text)
         return card, draft, None
 
     ocr_card, ocr_text = ocr.scan(variants)

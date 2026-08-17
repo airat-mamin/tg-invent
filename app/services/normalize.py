@@ -129,6 +129,20 @@ def match_brand(text: str | None) -> str | None:
     return None
 
 
+DELL_PPID_RE = re.compile(r"^CN0[A-Z0-9]{5}[A-Z0-9]{5,}$")
+
+
+def infer_brand_from_serial(serial: str | None) -> str | None:
+    """Определяет бренд по формату идентификатора.
+
+    Dell печатает на шильдиках PPID вида CN0<5 символов кода детали>…,
+    поэтому по одному штрихкоду можно заполнить производителя без OCR.
+    """
+    if serial and 18 <= len(serial) <= 25 and DELL_PPID_RE.match(serial):
+        return "DELL"
+    return None
+
+
 def _confusable_candidates(value: str, limit: int = 64) -> list[str]:
     positions = [i for i, char in enumerate(value) if char in CONFUSABLES]
     if not positions or len(positions) > 6:
