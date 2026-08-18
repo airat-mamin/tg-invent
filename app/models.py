@@ -59,6 +59,8 @@ class Card:
     raw_text: str | None = None
     duration_ms: int = 0
     notes: list[str] = field(default_factory=list)
+    # Строки штрихкода/QR, если контур их видел (локальный декодер или Cloud Vision).
+    barcode_payloads: list[str] = field(default_factory=list)
 
     @property
     def has_identifier(self) -> bool:

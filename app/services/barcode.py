@@ -194,10 +194,8 @@ def _accept_payload(payload: str) -> tuple[str | None, str | None, str | None]:
     return None, None, brand
 
 
-def scan(variants: ImageVariants) -> Card | None:
-    if not available():
-        return None
-    payloads = decode_all(variants)
+def card_from_payloads(payloads: list[str]) -> Card | None:
+    """Собирает карточку из строк штрихкода/QR, без повторного декодирования кадра."""
     if not payloads:
         return None
 
@@ -239,4 +237,11 @@ def scan(variants: ImageVariants) -> Card | None:
         source=Source.BARCODE,
         confidence=Confidence.HIGH,
         raw_text="\n".join(payloads),
+        barcode_payloads=list(payloads),
     )
+
+
+def scan(variants: ImageVariants) -> Card | None:
+    if not available():
+        return None
+    return card_from_payloads(decode_all(variants))

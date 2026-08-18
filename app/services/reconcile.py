@@ -41,7 +41,7 @@ def values_agree(field: str, left: str | None, right: str | None) -> bool:
     return _compact(left) == _compact(right)
 
 
-def _prefer_serial(primary: str | None, extra: str | None) -> str | None:
+def prefer_serial(primary: str | None, extra: str | None) -> str | None:
     if extra and not primary:
         return extra
     if primary and not extra:
@@ -77,7 +77,7 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
             if values_agree(field, current, other):
                 confirmed.append(title)
                 if field == "serial_number":
-                    chosen = _prefer_serial(current, other)
+                    chosen = prefer_serial(current, other)
                     if chosen != current:
                         primary.serial_number = nz.canonical_serial(chosen)
                         primary.serial_display = nz.display_serial(
@@ -95,6 +95,19 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
             else:
                 setattr(primary, field, other)
             filled.append(title)
+
+    barcode_hits = [
+        payload
+        for payload in vision.barcode_payloads
+        if serials_agree(primary.serial_number, payload)
+        or values_agree("service_tag", primary.service_tag, payload)
+    ]
+    if barcode_hits:
+        confirmed_barcode = "Cloud Vision подтвердил штрихкод: " + ", ".join(barcode_hits)
+        if confirmed_barcode not in primary.notes:
+            primary.notes.append(confirmed_barcode)
+        if not conflicts:
+            primary.confidence = Confidence.HIGH
 
     if confirmed:
         primary.notes.append("Cloud Vision подтвердил: " + ", ".join(confirmed))

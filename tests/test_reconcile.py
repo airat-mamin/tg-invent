@@ -84,6 +84,23 @@ def test_reconcile_without_vision_is_noop():
     assert reconcile.reconcile(primary, None) is primary
 
 
+def test_reconcile_notes_matching_barcode_payload():
+    primary = Card(
+        serial_number="61B7JAR6WWV904T4BB",
+        source=Source.BARCODE,
+        confidence=Confidence.HIGH,
+        barcode_payloads=["61B7JAR6WWV904T4BB"],
+    )
+    extra = Card(
+        serial_number="V904T4BB",
+        source=Source.VISION,
+        barcode_payloads=["61B7JAR6WWV904T4BB", "V904T4BB"],
+    )
+    result = reconcile.reconcile(primary, extra)
+    assert any("подтвердил штрихкод: 61B7JAR6WWV904T4BB" in note for note in result.notes)
+    assert result.serial_number == "61B7JAR6WWV904T4BB"
+
+
 def test_render_card_shows_vision_notes():
     card = Card(serial_number="ABC12345", notes=["Cloud Vision подтвердил: Серийный номер"])
     assert "Cloud Vision подтвердил: Серийный номер" in render_card(card)

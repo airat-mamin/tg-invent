@@ -43,3 +43,11 @@ def test_lenovo_barcode_payload_is_split_into_printed_serial():
     assert card.serial_number == payload
     assert card.serial_display == payload
     assert card.source == "barcode"
+    assert payload in card.barcode_payloads
+
+
+def test_card_from_payloads_reads_serial_and_tag():
+    card = barcode.card_from_payloads([SERIAL, SERVICE_TAG])
+    assert card is not None
+    assert card.serial_number == SERIAL
+    assert card.service_tag == SERVICE_TAG

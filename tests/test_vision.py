@@ -59,6 +59,35 @@ def test_card_from_vision_text_parses_lenovo_label():
     assert card.serial_number == "61B7JAR6WWV904T4BB"
 
 
+def test_barcode_payloads_from_lenovo_text():
+    text = (
+        "Lenovo ThinkVision E24-10 Serial Number: V9-04T4BB "
+        "61B7JAR6WWV904T4BB FRU Number: 00PC193 MONITOR 2019-08-16 SERVICE TAG JYK27D2"
+    )
+    payloads = vision.barcode_payloads_from_text(text)
+    assert "61B7JAR6WWV904T4BB" in payloads
+    assert "V904T4BB" in payloads
+    assert "MONITOR" not in payloads
+    assert "2019-08-16" not in payloads
+    assert "00PC193" not in payloads
+    assert "JYK27D2" in payloads
+
+
+def test_overlay_prefers_full_lenovo_barcode_line():
+    ocr_card = vision.card_from_vision_text(
+        "LENOVO",
+        [
+            Block("LENOVO", 0.99, 10, 10, 100, 40),
+            Block("SERIAL NUMBER: V9-04T4BB", 0.9, 10, 160, 280, 190),
+        ],
+    )
+    payloads = ["V904T4BB", "61B7JAR6WWV904T4BB"]
+    card = vision._overlay_barcode_payloads(ocr_card, payloads)
+    assert card is not None
+    assert card.serial_number == "61B7JAR6WWV904T4BB"
+    assert card.barcode_payloads == payloads
+
+
 def test_card_from_vision_text_returns_none_without_identifiers():
     assert vision.card_from_vision_text("DELL MADE IN CHINA", []) is None
 
