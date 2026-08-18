@@ -101,7 +101,8 @@ def barcode_payloads_from_text(text: str) -> list[str]:
     if not text:
         return []
     seen: list[str] = []
-    for token in _BARCODE_TOKEN.findall(nz.clean_text(text)):
+    source = nz.glue_hyphen_continuations(text)
+    for token in _BARCODE_TOKEN.findall(source):
         serial, tag, _ = barcode._accept_payload(token)
         compact = nz.normalize_identifier(token) or ""
         letters = sum(character.isalpha() for character in compact)
@@ -124,6 +125,9 @@ def barcode_payloads_from_text(text: str) -> list[str]:
             continue
         if payload and payload not in seen:
             seen.append(payload)
+    extra = nz.find_serial_payload(source)
+    if extra and extra not in seen:
+        seen.append(extra)
     return seen
 
 

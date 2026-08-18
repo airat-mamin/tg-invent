@@ -193,3 +193,16 @@ async def test_pipeline_notes_vision_outage_on_success(monkeypatch):
     assert result.card is primary
     assert any("недоступен" in note for note in result.card.notes)
     assert result.warning is None
+
+
+@pytest.mark.asyncio
+async def test_pipeline_notes_when_vision_returns_text_without_card(monkeypatch):
+    primary = Card(serial_number="CN0DMCK5WSL0028NCA4UA03", source=Source.BARCODE)
+    monkeypatch.setattr(
+        "app.services.pipeline._run_fast_contours",
+        lambda _raw: (primary, Card(), None),
+    )
+    monkeypatch.setattr("app.services.vision.enabled", lambda: True)
+    monkeypatch.setattr("app.services.vision.scan", lambda _raw: (None, "P2722H S/N:"))
+    result = await pipeline.process(b"img")
+    assert any("не собрал поля" in note for note in result.card.notes)

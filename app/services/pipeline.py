@@ -87,6 +87,15 @@ async def process(raw: bytes) -> PipelineResult:
         try:
             vision_card, vision_text = await asyncio.to_thread(vision.scan, raw)
             card = reconcile.reconcile(card, vision_card)
+            if (
+                vision_card is None
+                and vision_text.strip()
+                and card is not None
+                and not any("Cloud Vision" in note for note in card.notes)
+            ):
+                card.notes.append(
+                    "Cloud Vision прочитал текст, но не собрал поля для сверки"
+                )
         except vision.VisionUnavailableError as vision_error:
             logger.warning("Cloud Vision недоступен: %s", vision_error)
             if card is not None:

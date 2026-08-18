@@ -109,6 +109,18 @@ def test_samsung_vision_text_takes_sn_not_type_no():
     assert card is not None
     assert card.serial_number == "2133HLNC800394F"
     assert card.serial_number != "L8228370"
+
+
+def test_split_dell_ppid_becomes_vision_barcode_payload():
+    text = "S/N:\nCN-0DMCK5-\nWSL00-28N-\nCA4U-A03\nP2722H"
+    assert "CN0DMCK5WSL0028NCA4UA03" in vision.barcode_payloads_from_text(text)
+    card = vision.card_from_vision_text(text, [Block(text, 0.9, 0, 0, 400, 80)])
+    card = vision._overlay_barcode_payloads(card, vision.barcode_payloads_from_text(text))
+    assert card is not None
+    assert card.serial_number == "CN0DMCK5WSL0028NCA4UA03"
+
+
+def test_card_from_vision_text_returns_none_without_identifiers():
     assert vision.card_from_vision_text("DELL MADE IN CHINA", []) is None
 
 

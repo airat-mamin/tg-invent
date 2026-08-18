@@ -17,6 +17,11 @@ def test_hyphens_are_stripped_only_for_ppid():
     assert nz.canonical_serial(COMPACT) == COMPACT
 
 
+def test_split_dell_ppid_is_glued_from_vision_lines():
+    text = "S/N:\nCN-0DMCK5-\nWSL00-28N-\nCA4U-A03\nP2722H"
+    assert nz.find_serial_payload(text) == "CN0DMCK5WSL0028NCA4UA03"
+
+
 def test_display_form_restores_label_grouping():
     assert nz.display_serial(COMPACT) == PRINTED
     assert nz.display_serial("CN07MT01QDC0074Q0DDSA04") == "CN-07MT01-QDC00-74Q-0DDS-A04"

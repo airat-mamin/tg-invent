@@ -169,17 +169,35 @@ def inventory_serial(serial: str | None) -> str | None:
     return vendor.serial.inventory_value(serial)
 
 
+def glue_hyphen_continuations(text: str) -> str:
+    """Склеивает PPID, разорванный по дефису: «CN-0DMCK5-» + «WSL00-28N-»."""
+    if not text:
+        return ""
+    return re.sub(r"-\s+", "-", clean_text(text))
+
+
 def find_serial_payload(text: str) -> str | None:
     """Ищет в тексте строку штрихкода: длинный идентификатор формата производителя.
 
     На Lenovo под Code128 напечатано 61B7JAR6WWV904T4BB — в инвентаризацию
     идёт эта строка целиком, как её вернул бы сканер, а не укороченный S/N.
+    У Dell номер на наклейке часто режется по дефисам на три строки.
     """
     if not text:
         return None
+    glued = glue_hyphen_continuations(text)
     tokens = re.findall(r"\b[A-Z0-9]{12,24}\b", clean_text(text))
+    tokens += re.findall(r"\b[A-Z0-9]{12,24}\b", glued.replace("-", ""))
+    tokens += re.findall(
+        r"\b(?:CN|MY|TW|SG|MX|BR|IN|PH|TH|CZ|IE)-[A-Z0-9-]{10,28}",
+        glued,
+    )
     best: tuple[int, str] | None = None
+    seen: set[str] = set()
     for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
         polished, _ = polish_serial(token)
         candidate = polished or token
         if rules().match_serial(candidate) is None:
@@ -187,7 +205,7 @@ def find_serial_payload(text: str) -> str | None:
         value = canonical_serial(candidate)
         if not value or not is_valid_serial(value):
             continue
-        score = len(candidate)
+        score = len(value.replace("-", ""))
         if best is None or score > best[0]:
             best = (score, value)
     return best[1] if best else None
