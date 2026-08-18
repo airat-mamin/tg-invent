@@ -72,7 +72,8 @@ def test_lenovo_label_is_parsed_from_blocks():
     assert card is not None
     assert card.brand == "LENOVO"
     assert card.model == "E24-10"
-    assert card.serial_number == "V9-04T4BB"
+    assert card.serial_number == "V904T4BB"
+    assert card.serial_display == "V9-04T4BB"
     assert card.serial_number != "00PC193"
 
 
@@ -95,4 +96,23 @@ def test_lenovo_date_of_manufacture_is_not_model():
     card = parse_blocks([Block(text, 0.9, 0, 0, 400, 40)])
     assert card is not None
     assert card.model == "E24-10"
-    assert card.serial_number == "V9-04T4BB"
+    assert card.serial_number == "V904T4BB"
+
+
+def test_lenovo_barcode_payload_beats_garbled_serial_label():
+    text = (
+        "LENOVO THINKVISTON E24 10 MONITOR FRU NUMBER: OOPC193 "
+        "SERIOL NUMBER:, VA-O4TABE DATE OF MANUFACTURE: 2019-08-16 "
+        "61B7JARGWVVOO4T4BB"
+    )
+    assert nz.infer_brand_from_serial("61B7JAR6WWV904T4BB") == "LENOVO"
+    assert nz.inventory_serial("61B7JAR6WWV904T4BB") == "V904T4BB"
+    assert nz.polish_serial("61B7JARGWVVOO4T4BB") == ("61B7JAR6WWV904T4BB", True)
+    assert nz.find_serial_payload(text) == "V904T4BB"
+    card = parse_blocks([Block(text, 0.9, 0, 0, 400, 40)])
+    assert card is not None
+    assert card.brand == "LENOVO"
+    assert card.model == "E24-10"
+    assert card.serial_number == "V904T4BB"
+    assert card.serial_display == "V9-04T4BB"
+    assert card.serial_number != "VAO4TABE"

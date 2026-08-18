@@ -1,6 +1,31 @@
 brand: LENOVO
 aliases: [LENOVO, LENOVO GROUP]
 
+serial:
+  # ThinkVision: наклейка V9-04T4BB, штрихкод внизу — склейка MTM + S/N
+  # без разделителей: 61B7JAR6WW + V904T4BB → 61B7JAR6WWV904T4BB.
+  # MTM вида 61B7-JAR6-WW (тип не из одних цифр). 11S — префикс IBM/Lenovo.
+  pattern: '^(?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z]{2}[A-Z0-9]{8}$'
+  extract: '^(?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z]{2}([A-Z0-9]{8})$'
+  short: '^[A-Z][0-9][A-Z0-9]{6}$'
+  length: [8, 21]
+  hyphens: separator
+  groups:
+    8: [2, 6]
+  fixes:
+    - name: G вместо 6 в номере линейки MTM
+      pattern: '^((?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3})G'
+      replacement: '\g<1>6'
+    - name: V вместо W в суффиксе MTM
+      pattern: '^((?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z])V'
+      replacement: '\g<1>W'
+    - name: O вместо 9 в начале серийника
+      pattern: '^((?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z]{2}[A-Z])O'
+      replacement: '\g<1>9'
+    - name: O вместо нуля в серийнике
+      pattern: '^((?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z]{2}[A-Z][0-9])O'
+      replacement: '\g<1>0'
+
 model:
   # ThinkVision: буква линейки (не O — так OCR читает ноль в дате 2019-08),
   # диагональ и поколение. Примеры: E24-10, T24I-10.

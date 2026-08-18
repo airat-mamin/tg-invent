@@ -159,6 +159,40 @@ def canonical_serial(serial: str | None) -> str | None:
     return serial
 
 
+def inventory_serial(serial: str | None) -> str | None:
+    """Если штрихкод склеил MTM и S/N, возвращает только серийник с наклейки."""
+    if not serial:
+        return serial
+    vendor = rules().match_serial(serial)
+    if vendor is None or vendor.serial is None:
+        return serial
+    return vendor.serial.inventory_value(serial)
+
+
+def find_serial_payload(text: str) -> str | None:
+    """Ищет в тексте строку штрихкода: длинный идентификатор формата производителя.
+
+    На Lenovo под Code128 напечатано 61B7JAR6WWV904T4BB — это надёжнее, чем
+    значение после метки Serial Number, которое OCR часто калечит.
+    """
+    if not text:
+        return None
+    tokens = re.findall(r"\b[A-Z0-9]{12,24}\b", clean_text(text))
+    best: tuple[int, str] | None = None
+    for token in tokens:
+        polished, _ = polish_serial(token)
+        candidate = polished or token
+        if rules().match_serial(candidate) is None:
+            continue
+        value = canonical_serial(inventory_serial(candidate))
+        if not value or not is_valid_serial(value):
+            continue
+        score = (len(candidate), len(value))
+        if best is None or score > (best[0], len(best[1])):
+            best = (len(candidate), value)
+    return best[1] if best else None
+
+
 def display_serial(canonical: str | None, printed: str | None = None) -> str | None:
     """Возвращает номер в том виде, в каком он напечатан на наклейке.
 

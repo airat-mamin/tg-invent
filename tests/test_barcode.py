@@ -32,3 +32,14 @@ def test_qr_code_is_decoded():
     image = sticker(barcode_image(SERIAL, zxingcpp.BarcodeFormat.QRCode))
     card = barcode.scan(preprocess.build_variants(image))
     assert card is not None and card.serial_number == SERIAL
+
+
+def test_lenovo_barcode_payload_is_split_into_printed_serial():
+    payload = "61B7JAR6WWV904T4BB"
+    image = sticker(barcode_image(payload))
+    card = barcode.scan(preprocess.build_variants(image))
+    assert card is not None
+    assert card.brand == "LENOVO"
+    assert card.serial_number == "V904T4BB"
+    assert card.serial_display == "V9-04T4BB"
+    assert card.source == "barcode"

@@ -243,8 +243,12 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
     )
     serial, serial_polished = nz.polish_serial(serial)
     serial_fixed = serial_fixed or serial_polished
+    payload = nz.find_serial_payload(corpus)
+    if payload:
+        # Строка штрихкода важнее метки SERIAL: там номер обычно целый.
+        serial, serial_fixed = payload, serial_fixed or payload != serial
     printed_serial = serial
-    serial = nz.canonical_serial(serial)
+    serial = nz.canonical_serial(nz.inventory_serial(serial))
     if serial is not None and (
         len(serial) < MIN_OCR_SERIAL_LENGTH or nz.is_truncated_serial(serial)
     ):
@@ -299,8 +303,11 @@ def scan(variants: ImageVariants) -> tuple[Card | None, str]:
             best.brand or nz.match_brand(combined) or nz.infer_brand_from_serial(best.serial_number)
         )
         serial, serial_fixed = nz.polish_serial(best.serial_number)
+        payload = nz.find_serial_payload(combined)
+        if payload:
+            serial, serial_fixed = payload, True
         if serial:
-            best.serial_number = nz.canonical_serial(serial)
+            best.serial_number = nz.canonical_serial(nz.inventory_serial(serial))
             best.serial_display = nz.display_serial(best.serial_number, best.serial_display)
             best.corrected_symbols = best.corrected_symbols or serial_fixed
         model = nz.find_model_candidate(

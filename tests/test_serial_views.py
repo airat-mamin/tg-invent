@@ -1,7 +1,10 @@
 from app.keyboards.inline import confirmation
 from app.models import Card
 from app.services import normalize as nz
+from app.services.normalize import rules
 from app.texts import render_card
+
+rules.cache_clear()
 
 COMPACT = "CN0Y71R3TV20019B13QTA01"
 PRINTED = "CN-0Y71R3-TV200-19B-13QT-A01"
@@ -28,6 +31,13 @@ def test_display_form_prefers_what_ocr_actually_read():
 def test_unknown_format_is_shown_as_is():
     assert nz.display_serial("ABC12345") == "ABC12345"
     assert nz.display_serial(None) is None
+
+
+def test_lenovo_barcode_serial_is_shown_as_on_the_label():
+    assert nz.inventory_serial("61B7JAR6WWV904T4BB") == "V904T4BB"
+    assert nz.canonical_serial("V9-04T4BB") == "V904T4BB"
+    assert nz.display_serial("V904T4BB") == "V9-04T4BB"
+    assert nz.infer_brand_from_serial("61B7JAR6WWV904T4BB") == "LENOVO"
 
 
 def test_card_shows_printed_form():

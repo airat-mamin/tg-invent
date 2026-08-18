@@ -31,12 +31,24 @@ class SerialRules:
     groups: dict[int, tuple[int, ...]] = field(default_factory=dict)
     fixes: tuple[SerialFix, ...] = ()
     part_number: re.Pattern[str] | None = None
+    extract: re.Pattern[str] | None = None
+    short: re.Pattern[str] | None = None
 
     def matches(self, serial: str) -> bool:
-        return (
-            self.min_length <= len(serial) <= self.max_length
-            and self.pattern.match(serial) is not None
-        )
+        if not (self.min_length <= len(serial) <= self.max_length):
+            return False
+        if self.pattern.match(serial) is not None:
+            return True
+        return bool(self.short and self.short.fullmatch(serial))
+
+    def inventory_value(self, serial: str) -> str:
+        """Достаёт серийник из склеенного штрихкода (MTM+S/N у Lenovo)."""
+        if self.extract is None:
+            return serial
+        match = self.extract.fullmatch(serial)
+        if match and match.lastindex:
+            return match.group(1)
+        return serial
 
     def split_groups(self, serial: str) -> str | None:
         sizes = self.groups.get(len(serial))
@@ -203,6 +215,8 @@ def _load_serial_rules(data: dict[str, Any], where: str) -> SerialRules:
         )
 
     part_number = data.get("part_number")
+    extract = data.get("extract")
+    short = data.get("short")
     return SerialRules(
         pattern=pattern,
         min_length=int(length[0]),
@@ -211,6 +225,8 @@ def _load_serial_rules(data: dict[str, Any], where: str) -> SerialRules:
         groups=groups,
         fixes=tuple(fixes),
         part_number=_compile(part_number, f"{where}: serial.part_number") if part_number else None,
+        extract=_compile(extract, f"{where}: serial.extract") if extract else None,
+        short=_compile(short, f"{where}: serial.short") if short else None,
     )
 
 

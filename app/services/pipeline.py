@@ -3,7 +3,6 @@ import logging
 import time
 from dataclasses import dataclass
 
-from app.config import settings
 from app.models import Card
 from app.services import barcode, ocr, preprocess, vlm
 from app.services import normalize as nz
@@ -50,10 +49,10 @@ def _run_fast_contours(raw: bytes) -> tuple[Card | None, Card, str | None]:
                     card.model_inferred = True
                     card.brand = card.brand or pair[0]
         needs_enrichment = not (card.brand and card.model and card.serial_number)
-        if needs_enrichment and settings.ocr_enrich_after_barcode and ocr.engine.enabled:
-            # Штрихкод не всегда содержит модель и иногда читает только Service Tag,
-            # пока серийник ещё слишком мелкий. OCR дополняет пустые поля и не
-            # перезаписывает то, что уже взято из штрихкода.
+        if needs_enrichment and ocr.engine.enabled:
+            # Штрихкод почти всегда несёт серийник, но бренд и модель часто
+            # только на тексте. OCR дополняет пустые поля и не перезаписывает
+            # то, что уже взято из штрихкода.
             ocr_card, ocr_text = ocr.scan(variants)
             if ocr_card is not None:
                 card.merge_missing_from(ocr_card)
