@@ -14,7 +14,7 @@ from app.handlers import commands, edit, errors, scan
 from app.logging_setup import setup_logging
 from app.middlewares.access import AccessMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
-from app.services import barcode, normalize, ocr, vlm
+from app.services import barcode, normalize, ocr, vision, vlm
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,13 @@ async def _warmup() -> None:
         logger.info("Контур №1 (EasyOCR): %s", "готов" if loaded else "недоступен")
     else:
         logger.info("Контур №1 (EasyOCR): отключён настройками")
+    if settings.vision_enabled:
+        logger.info(
+            "Cloud Vision: %s",
+            "готов" if vision.enabled() else "ключ не найден, сверка отключена",
+        )
+    else:
+        logger.info("Cloud Vision: отключён настройками")
     if settings.vlm_enabled:
         healthy = await vlm.client.health()
         logger.info(

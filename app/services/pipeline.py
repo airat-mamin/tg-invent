@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 
 from app.models import Card
-from app.services import barcode, ocr, preprocess, vlm
+from app.services import barcode, ocr, preprocess, reconcile, vision, vlm
 from app.services import normalize as nz
 
 logger = logging.getLogger(__name__)
@@ -82,6 +82,18 @@ async def process(raw: bytes) -> PipelineResult:
         return PipelineResult(error="decode")
 
     warning: str | None = None
+    vision_text = ""
+    if vision.enabled():
+        try:
+            vision_card, vision_text = await asyncio.to_thread(vision.scan, raw)
+            card = reconcile.reconcile(card, vision_card)
+        except vision.VisionUnavailableError as vision_error:
+            logger.warning("Cloud Vision недоступен: %s", vision_error)
+            if card is not None:
+                card.notes.append("Cloud Vision недоступен — карточка по первому контуру")
+            else:
+                warning = "vision_unavailable"
+
     if card is None and vlm.client.enabled:
         try:
             card = await vlm.client.scan(raw)
@@ -89,15 +101,21 @@ async def process(raw: bytes) -> PipelineResult:
             logger.warning("Контур №2 недоступен: %s", vlm_error)
             warning = "vlm_unavailable"
 
+    raw_text = draft.raw_text
+    if vision_text:
+        raw_text = f"{raw_text}\n--- Cloud Vision ---\n{vision_text}" if raw_text else vision_text
+
     if card is not None:
         card.merge_missing_from(draft)
         if card.raw_text is None:
-            card.raw_text = draft.raw_text
+            card.raw_text = raw_text
+        elif vision_text and vision_text not in (card.raw_text or ""):
+            card.raw_text = f"{card.raw_text}\n--- Cloud Vision ---\n{vision_text}"
         card.duration_ms = int((time.monotonic() - started) * 1000)
 
     return PipelineResult(
         card=card,
         warning=warning,
         duration_ms=int((time.monotonic() - started) * 1000),
-        raw_text=draft.raw_text,
+        raw_text=raw_text,
     )

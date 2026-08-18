@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     ollama_timeout: int = 60
     max_concurrent_vlm: int = 1
 
+    # Облачный OCR для проверки и дополнения контуров №0/№1. Ключ не коммитить.
+    vision_enabled: bool = False
+    vision_credentials: Path | None = Path("data/gcp-vision.json")
+
     templates_dir: Path = Path(__file__).resolve().parents[1] / "templates"
 
     geocode_enabled: bool = True

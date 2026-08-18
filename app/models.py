@@ -5,6 +5,7 @@ from enum import StrEnum
 class Source(StrEnum):
     BARCODE = "barcode"
     OCR = "ocr"
+    VISION = "vision"
     VLM = "vlm"
     MANUAL = "manual"
     NONE = "none"
@@ -33,6 +34,7 @@ FIELD_TITLES = {
 SOURCE_TITLES = {
     Source.BARCODE: "штрихкод",
     Source.OCR: "OCR",
+    Source.VISION: "Cloud Vision",
     Source.VLM: "нейросеть",
     Source.MANUAL: "ручной ввод",
     Source.NONE: "не распознано",

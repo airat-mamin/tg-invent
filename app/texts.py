@@ -34,6 +34,7 @@ DOWNLOAD_FAILED = "Не удалось загрузить файл из Telegram
 BROKEN_IMAGE = "Не удалось открыть изображение. Пришлите фото в JPEG или PNG."
 INTERNAL_ERROR = "Произошла внутренняя ошибка. Попробуйте ещё раз позже."
 VLM_UNAVAILABLE = "⚠️ Углублённое распознавание временно недоступно."
+VISION_UNAVAILABLE = "⚠️ Cloud Vision временно недоступен — карточка собрана без облачной сверки."
 CANCELLED = "Редактирование отменено."
 ASK_LOCATION = (
     "📍 <b>Где стоит это оборудование?</b>\n\n"
@@ -78,6 +79,10 @@ def render_card(card: Card) -> str:
         if field == "model" and card.model_inferred:
             line += " <i>(по номеру детали)</i>"
         lines.append(line)
+    if card.notes:
+        lines.append("")
+        for note in card.notes:
+            lines.append(f"ℹ️ {escape(note)}")
     lines.append("")
     if card.confidence is not Confidence.HIGH or card.corrected_symbols:
         lines.append(LOW_CONFIDENCE_WARNING)

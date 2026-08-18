@@ -11,6 +11,7 @@
 | Приём фото и файлов-изображений, `/start`, `/help`, `/last`, `/export`, `/stats`, `/cancel` | ✅ |
 | Контур №0 — штрихкоды Code128/Code39/QR/DataMatrix | ✅ |
 | Контур №1 — EasyOCR + RegEx + поиск по соседству блоков | ✅ (включается `OCR_ENABLED`) |
+| Cloud Vision — сверка и дополнение карточки | ✅ (включается `VISION_ENABLED`, нужен ключ GCP) |
 | Контур №2 — Llama 3.2 Vision через Ollama | ✅ (включается `VLM_ENABLED`, нужен GPU) |
 | Нормализация, валидация, подбор визуально схожих символов, уровни доверия | ✅ |
 | Карточка с копированием по нажатию, подтверждение и ручная правка | ✅ |
@@ -56,6 +57,12 @@ docker compose exec ollama ollama pull llama3.2-vision:11b
 и выставить `VLM_ENABLED=true` в `.env`. Без GPU (≥10 ГБ VRAM) контур №2 включать не стоит:
 время ответа выйдет далеко за целевые 30 секунд из ТЗ.
 
+Для облачной сверки Google Cloud Vision положите JSON сервисного аккаунта в
+`data/gcp-vision.json` (каталог в `.gitignore`) и выставьте `VISION_ENABLED=true`.
+Cloud Vision не заменяет EasyOCR: сначала работают штрихкод и локальный OCR,
+облако подтверждает совпадения и заполняет пустые поля. При расхождении остаётся
+результат первого контура.
+
 ## Конфигурация
 
 Все параметры описаны в `.env.example`. Ключевые:
@@ -68,6 +75,8 @@ docker compose exec ollama ollama pull llama3.2-vision:11b
 | `TEMPLATES_DIR` | `templates` | Каталог с шаблонами разбора шильдиков, см. [templates/README.md](../templates/README.md) |
 | `OCR_ENABLED` | `true` | Если EasyOCR не установлен, контур отключается сам с предупреждением в логе |
 | `OCR_ENRICH_AFTER_BARCODE` | `false` | Дочитывать производителя и модель через OCR после успешного штрихкода: карточка полнее, но ответ растёт с ~0.4 с до ~3 с |
+| `VISION_ENABLED` | `false` | Облачная сверка Google Cloud Vision: подтверждает совпадения, заполняет пустые поля, при конфликте оставляет первый контур |
+| `VISION_CREDENTIALS` | `data/gcp-vision.json` | JSON ключа сервисного аккаунта. Файл в `data/` не попадает в git |
 | `VLM_ENABLED` | `false` | Включать только при наличии GPU |
 | `GEOCODE_ENABLED` | `true` | Обратное геокодирование геопозиции через Nominatim; при `false` адрес нужно ввести текстом |
 | `STORE_IMAGES` | `false` | Хранение исходных фото; удаляются через `IMAGE_RETENTION_DAYS` |

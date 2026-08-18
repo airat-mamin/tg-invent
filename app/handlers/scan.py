@@ -120,6 +120,8 @@ async def _process(
         failure = texts.FAILURE
         if result.warning == "vlm_unavailable":
             failure = f"{texts.VLM_UNAVAILABLE}\n\n{failure}"
+        elif result.warning == "vision_unavailable":
+            failure = f"{texts.VISION_UNAVAILABLE}\n\n{failure}"
         await status_message.edit_text(failure)
         return
 
