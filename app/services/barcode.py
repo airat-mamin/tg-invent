@@ -47,13 +47,20 @@ def _decode_one(image: np.ndarray) -> list[str]:
     return texts
 
 
+def _is_inventory_payload(value: str) -> bool:
+    """Короткий код вроде ревизии A03 или Service Tag ещё не повод останавливаться."""
+    compact = nz.normalize_identifier(value)
+    return bool(compact) and len(compact) >= 8
+
+
 def decode_all(variants: ImageVariants) -> list[str]:
     """Пробует декодировать коды на всех вариантах изображения, масштабах и поворотах.
 
     Увеличение обязательно: на снимке 1280x720, где наклейка занимает четверть
     кадра, штрихи оказываются уже пикселя и декодер их не видит, хотя после
-    двукратного апскейла код читается без ошибок. Декодирование дешёвое,
-    поэтому масштабы перебираются от меньшего к большему до первой удачи.
+    двукратного апскейла код читается без ошибок. Останавливаемся, когда найден
+    достаточно длинный идентификатор: короткий Service Tag или «A03» с ревизии
+    часто читаются раньше, чем серийник на том же шильдике.
     """
     seen: list[str] = []
     for scale in UPSCALE_STEPS:
@@ -68,8 +75,8 @@ def decode_all(variants: ImageVariants) -> list[str]:
                     value = text.strip()
                     if value and value not in seen:
                         seen.append(value)
-            if seen:
-                return seen
+        if any(_is_inventory_payload(item) for item in seen):
+            return seen
     return seen
 
 

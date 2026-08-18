@@ -6,6 +6,7 @@ from app.db.database import Database
 from app.export import exporter
 from app.handlers import edit, scan
 from app.models import Card, Confidence, Source, Status
+from app.services import normalize as nz
 from app.texts import ASK_LOCATION
 from tests.factories import SERIAL, SERVICE_TAG, barcode_image, sticker_bytes
 
@@ -54,7 +55,8 @@ async def test_photo_to_confirmed_record(db):
 
     status_message.edit_text.assert_awaited_once()
     text = status_message.edit_text.await_args.args[0]
-    assert SERIAL in text and SERVICE_TAG in text
+    assert SERVICE_TAG in text
+    assert SERIAL in text or nz.display_serial(SERIAL) in text
     assert "<code>" in text
     assert status_message.edit_text.await_args.kwargs["reply_markup"] is not None
 

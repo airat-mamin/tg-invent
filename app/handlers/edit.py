@@ -180,7 +180,11 @@ async def _offer_location(
     last = _place_from_row(await db.get_user_place(user_id))
     await state.set_state(EditStates.waiting_geo)
     await state.update_data(scan_id=scan_id, place=last.to_dict() if last else None)
-    await message.answer(texts.ASK_LOCATION, reply_markup=share_location())
+    # request_location в группах Telegram отклоняет: «location can be requested
+    # in private chats only». Там оставляем ввод адреса текстом.
+    chat_type = getattr(getattr(message, "chat", None), "type", "private")
+    geo_markup = share_location() if chat_type == "private" else hide_keyboard()
+    await message.answer(texts.ASK_LOCATION, reply_markup=geo_markup)
     await message.answer(
         "Либо выберите действие:",
         reply_markup=location_actions(scan_id, last.address() if last else None),

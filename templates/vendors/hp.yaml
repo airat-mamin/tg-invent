@@ -1,0 +1,7 @@
+brand: HP
+aliases: [HP, HP INC, HEWLETT-PACKARD, HEWLETT PACKARD]
+
+model:
+  # Мониторы линейки N/P/E/V: N246V, P24H, E24G4. Не путать с номерами изделий
+  # вроде 3NS59AA и обрывками OCR «48/449/99G».
+  token_pattern: '^[A-Z]\d{2,3}[A-Z]\d?$'

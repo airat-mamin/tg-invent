@@ -63,7 +63,7 @@ class Card:
         return bool(self.serial_number or self.service_tag)
 
     def merge_missing_from(self, other: "Card") -> None:
-        """Дополняет пустые описательные поля данными предыдущего контура."""
-        for name in ("brand", "model"):
+        """Дополняет пустые поля данными предыдущего контура."""
+        for name in ("brand", "model", "serial_number", "serial_display", "service_tag"):
             if getattr(self, name) is None and getattr(other, name) is not None:
                 setattr(self, name, getattr(other, name))

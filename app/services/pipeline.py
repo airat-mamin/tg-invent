@@ -41,11 +41,22 @@ def _run_fast_contours(raw: bytes) -> tuple[Card | None, Card, str | None]:
     card = barcode.scan(variants)
     if card is not None:
         card.brand = card.brand or nz.infer_brand_from_serial(card.serial_number)
-        needs_enrichment = not (card.brand and card.model)
+        if not card.model and card.serial_number:
+            pair = nz.part_number(card.serial_number)
+            if pair is not None:
+                mapped = nz.model_from_part(*pair)
+                if mapped:
+                    card.model = mapped
+                    card.model_inferred = True
+                    card.brand = card.brand or pair[0]
+        needs_enrichment = not (card.brand and card.model and card.serial_number)
         if needs_enrichment and settings.ocr_enrich_after_barcode and ocr.engine.enabled:
-            # Штрихкод не всегда содержит модель, поэтому по запросу дочитываем её OCR.
-            # Значения из штрихкода при этом не трогаем: там источник надёжнее.
-            _, ocr_text = ocr.scan(variants)
+            # Штрихкод не всегда содержит модель и иногда читает только Service Tag,
+            # пока серийник ещё слишком мелкий. OCR дополняет пустые поля и не
+            # перезаписывает то, что уже взято из штрихкода.
+            ocr_card, ocr_text = ocr.scan(variants)
+            if ocr_card is not None:
+                card.merge_missing_from(ocr_card)
             if ocr_text:
                 card.brand = card.brand or nz.match_brand(ocr_text)
                 card.model = card.model or _model_from_text(

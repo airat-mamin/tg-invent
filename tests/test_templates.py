@@ -11,6 +11,8 @@ def test_shipped_templates_load():
     registry = load_registry(settings.templates_dir)
     assert registry.by_brand("DELL") is not None
     assert registry.by_brand("MSI") is not None
+    assert registry.by_brand("BENQ") is not None
+    assert registry.by_brand("HP") is not None
     assert "SAMSUNG" in registry.brand_names
 
 
