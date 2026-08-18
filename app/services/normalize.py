@@ -35,8 +35,16 @@ CONFUSABLES = {
     "Q": "0",
 }
 # Дополнительные пары, которые OCR путает в обозначениях моделей
-# (3↔J на наклейках Samsung: UE32D5000PW → UEJ2D5000PW).
-MODEL_CONFUSABLES = {**CONFUSABLES, "J": "3", "3": "J"}
+# (3↔J на наклейках Samsung: UE32D5000PW → UEJ2D5000PW;
+#  O↔Q на MSI: PRO MP275QPG → PRO MP27SOPG / VPROMP275OPG).
+MODEL_CONFUSABLES: dict[str, str | tuple[str, ...]] = {
+    **CONFUSABLES,
+    "J": "3",
+    "3": "J",
+    "O": ("0", "Q"),
+    "Q": ("0", "O"),
+}
+SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN)(?=[A-Z])")
 
 
 @lru_cache(maxsize=1)
@@ -115,16 +123,19 @@ def polish_serial(serial: str | None) -> tuple[str | None, bool]:
 
     Правка принимается, только если после неё значение начинает соответствовать
     формату производителя, — иначе она была бы догадкой на пустом месте.
+    Несколько правок одного вендора применяются подряд: на MSI в одном номере
+    OCR одновременно путает Q с 0 и T с 1.
     """
     if not serial:
         return serial, False
     for vendor in rules().vendors:
         if vendor.serial is None or vendor.serial.matches(serial):
             continue
+        candidate = serial
         for fix in vendor.serial.fixes:
-            candidate = fix.pattern.sub(fix.replacement, serial)
-            if candidate != serial and vendor.serial.matches(candidate):
-                return candidate, True
+            candidate = fix.pattern.sub(fix.replacement, candidate)
+        if candidate != serial and vendor.serial.matches(candidate):
+            return candidate, True
     return serial, False
 
 
@@ -225,18 +236,36 @@ def polish_model(value: str | None, brand: str | None = None) -> tuple[str | Non
     normalized = normalize_value(value)
     if normalized is None:
         return None, False
-    if is_valid_model(normalized) and _matches_vendor_model(normalized, brand):
-        return normalized, False
+    matches: list[tuple[str, bool]] = []
+    pretty = _pretty_model(normalized)
+    if is_valid_model(pretty) and _matches_vendor_model(pretty, brand):
+        matches.append((pretty, pretty != normalized))
     for candidate in _confusable_candidates(normalized, mapping=MODEL_CONFUSABLES):
-        if is_valid_model(candidate) and _matches_vendor_model(candidate, brand):
-            return candidate, True
+        pretty = _pretty_model(candidate)
+        if is_valid_model(pretty) and _matches_vendor_model(pretty, brand):
+            matches.append((pretty, True))
+    if matches:
+        pretty, fixed = max(matches, key=lambda item: _rank_model(item[0]))
+        return pretty, fixed
     # Если производитель известен, не принимаем значение, которое не сходится
     # с его формой: иначе в карточку попадает мусор OCR вроде MCTOYHHK.
     if brand is not None and rules().by_brand(brand) and rules().by_brand(brand).model_token:
         return None, False
-    if is_valid_model(normalized):
-        return normalized, False
+    pretty = _pretty_model(normalized)
+    if is_valid_model(pretty):
+        return pretty, pretty != normalized
     return None, False
+
+
+def _pretty_model(value: str) -> str:
+    """Ставит пробел после серии: PROMP275QPG → PRO MP275QPG."""
+    return SERIES_PREFIX.sub(r"\1 ", value)
+
+
+def _rank_model(value: str) -> tuple[int, int]:
+    """Среди подходящих вариантов предпочитаем без «O» в коде (OCR путает O и Q)."""
+    code = re.sub(r"^(PRO|MAG|MODERN) ?", "", value).replace(" ", "")
+    return (-code.count("O"), len(value))
 
 
 def match_model_shape(value: str | None) -> tuple[str, str] | None:
@@ -247,8 +276,8 @@ def match_model_shape(value: str | None) -> tuple[str, str] | None:
     """
     if not value:
         return None
-    candidate = value.upper()
-    if not is_valid_model(candidate):
+    candidate, _ = polish_model(value, None)
+    if not candidate or not is_valid_model(candidate):
         return None
     for vendor in rules().vendors:
         if vendor.model_token is not None and vendor.model_token.fullmatch(candidate):
@@ -279,34 +308,56 @@ def find_model_candidate(
     corpus = clean_text(text)
     blocked = tuple(value for value in exclude if value)
     counts: dict[str, int] = {}
-    for token in re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus):
+
+    tokens = re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus)
+    tokens += re.findall(r"\b(?:PRO|MAG|MODERN)\s+[A-Z0-9][A-Z0-9\-]{3,20}\b", corpus)
+    compact_tokens = [token.replace(" ", "") for token in tokens]
+    vendor = rules().by_brand(brand)
+    if vendor is not None and vendor.model_token is not None:
+        inner = vendor.model_token.pattern
+        if inner.startswith("^") and inner.endswith("$"):
+            inner = inner[1:-1]
+        for token in compact_tokens:
+            tokens += [match.group(0) for match in re.finditer(inner, token)]
+
+    for token in tokens:
         if token in rules().common.model_stopwords or token in rules().brand_names:
             continue
-        if any(token in value for value in blocked):
+        if any(token in value or value in token for value in blocked if value):
             continue
         polished, _ = polish_model(token, brand)
         if not polished or not _matches_vendor_model(polished, brand):
             continue
         if brand is None and not any(
-            vendor.model_token and vendor.model_token.fullmatch(polished)
-            for vendor in rules().vendors
+            item.model_token and item.model_token.fullmatch(polished)
+            for item in rules().vendors
         ) and not rules().common.model_token.fullmatch(polished):
             continue
         counts[polished] = counts.get(polished, 0) + 1
     if not counts:
         return None
-    best = max(counts, key=lambda token: (counts[token], -len(token)))
+    prefer_long = vendor is not None and vendor.model_token is not None
+    length_key = (lambda token: len(token)) if prefer_long else (lambda token: -len(token))
+    best = max(counts, key=lambda token: (counts[token], length_key(token)))
     return best if is_valid_model(best) else None
 
 
+def _mapping_options(char: str, pairs: dict[str, str | tuple[str, ...]]) -> tuple[str, ...]:
+    raw = pairs[char]
+    extras = (raw,) if isinstance(raw, str) else raw
+    return (char, *extras)
+
+
 def _confusable_candidates(
-    value: str, limit: int = 64, mapping: dict[str, str] | None = None
+    value: str,
+    limit: int = 64,
+    mapping: dict[str, str | tuple[str, ...]] | None = None,
 ) -> list[str]:
     pairs = mapping or CONFUSABLES
     positions = [i for i, char in enumerate(value) if char in pairs]
     if not positions or len(positions) > 6:
         return []
-    options = [(char, pairs[char]) for char in (value[i] for i in positions)]
+    options = [_mapping_options(value[i], pairs) for i in positions]
     candidates: list[str] = []
     for combo in product(*options):
         chars = list(value)

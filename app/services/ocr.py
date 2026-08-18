@@ -295,4 +295,24 @@ def scan(variants: ImageVariants) -> tuple[Card | None, str]:
             continue
         if best is None or (card.model and not best.model):
             best = card
-    return best, " ".join(texts)
+    combined = " ".join(texts)
+    if best is not None and combined:
+        best.brand = best.brand or nz.match_brand(combined) or nz.infer_brand_from_serial(
+            best.serial_number
+        )
+        serial, serial_fixed = nz.polish_serial(best.serial_number)
+        if serial:
+            best.serial_number = nz.canonical_serial(serial)
+            best.serial_display = nz.display_serial(best.serial_number, best.serial_display)
+            best.corrected_symbols = best.corrected_symbols or serial_fixed
+        model = nz.find_model_candidate(
+            combined,
+            exclude=(best.serial_number, best.service_tag),
+            brand=best.brand,
+        )
+        current, _ = nz.polish_model(best.model, best.brand)
+        if model and (current is None or len(model) >= len(current)):
+            best.model = model
+        elif current:
+            best.model = current
+    return best, combined

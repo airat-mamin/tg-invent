@@ -77,7 +77,7 @@ docker compose exec ollama ollama pull llama3.2-vision:11b
 
 Форматы идентификаторов у производителей разные, поэтому правила лежат не в коде,
 а в каталоге `templates`: общие в `common.yaml`, по производителям — в
-`templates/vendors/*.yaml` (сейчас Dell и Philips). Добавление вендора не требует
+`templates/vendors/*.yaml` (Dell, Philips, DEXP, Samsung, MSI). Добавление вендора не требует
 изменений в коде. Формат описан в [templates/README.md](../templates/README.md).
 
 Шаблон задаёт в том числе форму обозначения модели. Это нужно не только для
