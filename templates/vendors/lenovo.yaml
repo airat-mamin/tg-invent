@@ -2,8 +2,9 @@ brand: LENOVO
 aliases: [LENOVO, LENOVO GROUP]
 
 serial:
-  # ThinkVision: наклейка V9-04T4BB, штрихкод внизу — склейка MTM + S/N
-  # без разделителей: 61B7JAR6WW + V904T4BB → 61B7JAR6WWV904T4BB.
+  # ThinkVision: в штрихкоде MTM + S/N без разделителей, как под кодом:
+  # 61B7JAR6WWV904T4BB. Это и есть номер для инвентаризации (как со сканера).
+  # Надпись Serial Number (V9-04T4BB) — хвост той же строки.
   # MTM вида 61B7-JAR6-WW (тип не из одних цифр). 11S — префикс IBM/Lenovo.
   pattern: '^(?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z]{2}[A-Z0-9]{8}$'
   extract: '^(?:11S)?[0-9]{2}[A-Z0-9]{2}[A-Z]{3}[0-9][A-Z]{2}([A-Z0-9]{8})$'

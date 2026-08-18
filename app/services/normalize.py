@@ -172,8 +172,8 @@ def inventory_serial(serial: str | None) -> str | None:
 def find_serial_payload(text: str) -> str | None:
     """Ищет в тексте строку штрихкода: длинный идентификатор формата производителя.
 
-    На Lenovo под Code128 напечатано 61B7JAR6WWV904T4BB — это надёжнее, чем
-    значение после метки Serial Number, которое OCR часто калечит.
+    На Lenovo под Code128 напечатано 61B7JAR6WWV904T4BB — в инвентаризацию
+    идёт эта строка целиком, как её вернул бы сканер, а не укороченный S/N.
     """
     if not text:
         return None
@@ -184,12 +184,12 @@ def find_serial_payload(text: str) -> str | None:
         candidate = polished or token
         if rules().match_serial(candidate) is None:
             continue
-        value = canonical_serial(inventory_serial(candidate))
+        value = canonical_serial(candidate)
         if not value or not is_valid_serial(value):
             continue
-        score = (len(candidate), len(value))
-        if best is None or score > (best[0], len(best[1])):
-            best = (len(candidate), value)
+        score = len(candidate)
+        if best is None or score > best[0]:
+            best = (score, value)
     return best[1] if best else None
 
 

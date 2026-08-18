@@ -37,6 +37,7 @@ def test_lenovo_barcode_serial_is_shown_as_on_the_label():
     assert nz.inventory_serial("61B7JAR6WWV904T4BB") == "V904T4BB"
     assert nz.canonical_serial("V9-04T4BB") == "V904T4BB"
     assert nz.display_serial("V904T4BB") == "V9-04T4BB"
+    assert nz.display_serial("61B7JAR6WWV904T4BB") == "61B7JAR6WWV904T4BB"
     assert nz.infer_brand_from_serial("61B7JAR6WWV904T4BB") == "LENOVO"
 
 

@@ -185,11 +185,10 @@ def _accept_payload(payload: str) -> tuple[str | None, str | None, str | None]:
     if value is None:
         return None, None, None
     brand = nz.infer_brand_from_serial(value)
-    serial = nz.inventory_serial(value)
     if nz.is_valid_service_tag(value) and not nz.rules().match_serial(value):
         return None, value, brand
-    if serial and nz.is_valid_serial(serial):
-        return serial, None, brand
+    if nz.is_valid_serial(value):
+        return value, None, brand
     if nz.is_valid_service_tag(value):
         return None, value, brand
     return None, None, brand

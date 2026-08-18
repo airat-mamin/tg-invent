@@ -108,11 +108,11 @@ def test_lenovo_barcode_payload_beats_garbled_serial_label():
     assert nz.infer_brand_from_serial("61B7JAR6WWV904T4BB") == "LENOVO"
     assert nz.inventory_serial("61B7JAR6WWV904T4BB") == "V904T4BB"
     assert nz.polish_serial("61B7JARGWVVOO4T4BB") == ("61B7JAR6WWV904T4BB", True)
-    assert nz.find_serial_payload(text) == "V904T4BB"
+    assert nz.find_serial_payload(text) == "61B7JAR6WWV904T4BB"
     card = parse_blocks([Block(text, 0.9, 0, 0, 400, 40)])
     assert card is not None
     assert card.brand == "LENOVO"
     assert card.model == "E24-10"
-    assert card.serial_number == "V904T4BB"
-    assert card.serial_display == "V9-04T4BB"
-    assert card.serial_number != "VAO4TABE"
+    assert card.serial_number == "61B7JAR6WWV904T4BB"
+    assert card.serial_display == "61B7JAR6WWV904T4BB"
+    assert "VAO4TABE" not in (card.serial_number or "")

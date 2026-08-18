@@ -40,6 +40,6 @@ def test_lenovo_barcode_payload_is_split_into_printed_serial():
     card = barcode.scan(preprocess.build_variants(image))
     assert card is not None
     assert card.brand == "LENOVO"
-    assert card.serial_number == "V904T4BB"
-    assert card.serial_display == "V9-04T4BB"
+    assert card.serial_number == payload
+    assert card.serial_display == payload
     assert card.source == "barcode"
