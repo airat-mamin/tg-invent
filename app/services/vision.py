@@ -18,6 +18,13 @@ class VisionUnavailableError(RuntimeError):
     pass
 
 
+def _short_error(error: object) -> str:
+    text = str(error).split("\n", 1)[0].strip()
+    if "BILLING" in str(error).upper() or "billing to be enabled" in str(error).lower():
+        return "нужно включить биллинг в проекте Google Cloud"
+    return text[:300]
+
+
 def _credentials_path() -> Path | None:
     path = settings.vision_credentials
     if not path:
@@ -92,7 +99,7 @@ def _annotator():
     try:
         _client = vision.ImageAnnotatorClient.from_service_account_file(str(path))
     except Exception as error:  # noqa: BLE001 - битый ключ или SDK
-        raise VisionUnavailableError(str(error)) from error
+        raise VisionUnavailableError(_short_error(error)) from error
     return _client
 
 
@@ -110,9 +117,9 @@ def scan(image: bytes) -> tuple[Card | None, str]:
     except VisionUnavailableError:
         raise
     except Exception as error:  # noqa: BLE001 - сеть и ошибки API
-        raise VisionUnavailableError(str(error)) from error
+        raise VisionUnavailableError(_short_error(error)) from error
     if response.error.message:
-        raise VisionUnavailableError(response.error.message)
+        raise VisionUnavailableError(_short_error(response.error.message))
 
     annotation = response.full_text_annotation
     full_text = (annotation.text if annotation else "") or ""

@@ -103,7 +103,8 @@ async def process(raw: bytes) -> PipelineResult:
 
     raw_text = draft.raw_text
     if vision_text:
-        raw_text = f"{raw_text}\n--- Cloud Vision ---\n{vision_text}" if raw_text else vision_text
+        tagged = f"--- Cloud Vision ---\n{vision_text}"
+        raw_text = f"{raw_text}\n{tagged}" if raw_text else tagged
 
     if card is not None:
         card.merge_missing_from(draft)

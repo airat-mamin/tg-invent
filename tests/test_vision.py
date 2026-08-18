@@ -79,3 +79,10 @@ def test_enabled_requires_flag_and_existing_key(tmp_path, monkeypatch):
 def test_scan_is_noop_when_disabled(monkeypatch):
     monkeypatch.setattr(vision, "enabled", lambda: False)
     assert vision.scan(b"img") == (None, "")
+
+
+def test_billing_error_is_shortened():
+    message = vision._short_error(
+        '403 This API method requires billing to be enabled. Please enable billing'
+    )
+    assert message == "нужно включить биллинг в проекте Google Cloud"
