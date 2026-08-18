@@ -7,7 +7,7 @@
 import re
 from difflib import SequenceMatcher
 from functools import lru_cache
-from itertools import product
+from itertools import combinations, product
 
 from app.config import settings
 from app.services.vendors import Registry, load_registry
@@ -43,7 +43,11 @@ MODEL_CONFUSABLES: dict[str, str | tuple[str, ...]] = {
     "3": "J",
     "O": ("0", "Q"),
     "Q": ("0", "O"),
+    "1": ("I", "S"),
+    "T": "7",
+    "7": "T",
 }
+DATE_LIKE = re.compile(r"^\d{4}-\d{2}(?:-\d{2})?$")
 SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN)(?=[A-Z])")
 
 
@@ -108,7 +112,7 @@ def match_brand(text: str | None) -> str | None:
         for brand in known:
             if len(brand) < 4 or abs(len(word) - len(brand)) > 1:
                 continue
-            if SequenceMatcher(None, word, brand).ratio() >= 0.85:
+            if SequenceMatcher(None, word, brand).ratio() >= 0.80:
                 return _canonical_brand(brand)
     return None
 
@@ -219,53 +223,114 @@ def part_number(serial: str | None) -> tuple[str, str] | None:
 
 
 def _matches_vendor_model(value: str, brand: str | None) -> bool:
-    vendors = [rules().by_brand(brand)] if brand else list(rules().vendors)
-    vendors = [vendor for vendor in vendors if vendor is not None]
-    if not vendors:
-        return True
-    for vendor in vendors:
-        if vendor.model_token is not None and vendor.model_token.fullmatch(value):
+    vendor = rules().by_brand(brand) if brand else None
+    if vendor is not None and vendor.model_token is not None:
+        return vendor.model_token.fullmatch(value) is not None
+    vendors = list(rules().vendors) if not brand else []
+    for item in vendors:
+        if item.model_token is not None and item.model_token.fullmatch(value):
             return True
-        if vendor.model_token is None and not brand:
-            continue
-    return False
+    return rules().common.model_token.fullmatch(value) is not None
+
+
+def _looks_like_date(value: str) -> bool:
+    """Дата выпуска на шильдике (2019-08-16) не должна становиться моделью O19-08."""
+    restored = value.replace(" ", "").translate(str.maketrans("OIZSB", "01258"))
+    return DATE_LIKE.fullmatch(restored) is not None
 
 
 def polish_model(value: str | None, brand: str | None = None) -> tuple[str | None, bool]:
     """Исправляет типичные ошибки OCR в обозначении модели по шаблону вендора."""
     normalized = normalize_value(value)
-    if normalized is None:
+    if normalized is None or _looks_like_date(normalized):
         return None, False
     matches: list[tuple[str, bool]] = []
-    pretty = _pretty_model(normalized)
-    if is_valid_model(pretty) and _matches_vendor_model(pretty, brand):
-        matches.append((pretty, pretty != normalized))
-    for candidate in _confusable_candidates(normalized, mapping=MODEL_CONFUSABLES):
-        pretty = _pretty_model(candidate)
-        if is_valid_model(pretty) and _matches_vendor_model(pretty, brand):
-            matches.append((pretty, True))
+    seen: set[str] = set()
+    for source in _model_source_variants(normalized, brand):
+        for candidate in (source, *_confusable_candidates(source, mapping=MODEL_CONFUSABLES)):
+            pretty = _pretty_model(candidate)
+            for item in (pretty, _extract_vendor_model(pretty, brand)):
+                if not item or item in seen:
+                    continue
+                if is_valid_model(item) and _matches_vendor_model(item, brand):
+                    seen.add(item)
+                    matches.append((item, item != normalized))
     if matches:
-        pretty, fixed = max(matches, key=lambda item: _rank_model(item[0]))
+        pretty, fixed = max(matches, key=lambda item: _rank_model(item[0], normalized))
         return pretty, fixed
     # Если производитель известен, не принимаем значение, которое не сходится
     # с его формой: иначе в карточку попадает мусор OCR вроде MCTOYHHK.
     if brand is not None and rules().by_brand(brand) and rules().by_brand(brand).model_token:
         return None, False
     pretty = _pretty_model(normalized)
-    if is_valid_model(pretty):
+    if is_valid_model(pretty) and (
+        rules().common.model_token.fullmatch(pretty) or _matches_vendor_model(pretty, brand)
+    ):
         return pretty, pretty != normalized
     return None, False
 
 
 def _pretty_model(value: str) -> str:
-    """Ставит пробел после серии: PROMP275QPG → PRO MP275QPG."""
-    return SERIES_PREFIX.sub(r"\1 ", value)
+    """Ставит пробел после серии и дефис в ThinkVision E24 10 → E24-10."""
+    value = SERIES_PREFIX.sub(r"\1 ", value)
+    return re.sub(r"^([A-Z]\d{2}) (\d{2})$", r"\1-\2", value)
 
 
-def _rank_model(value: str) -> tuple[int, int]:
-    """Среди подходящих вариантов предпочитаем без «O» в коде (OCR путает O и Q)."""
-    code = re.sub(r"^(PRO|MAG|MODERN) ?", "", value).replace(" ", "")
-    return (-code.count("O"), len(value))
+def _rank_model(value: str, original: str) -> tuple[int, int, int, int]:
+    """Меньше «O» (OCR путает с Q), без ложных Z/I, для Samsung S из ведущей 1."""
+    compact_value = value.replace(" ", "")
+    compact_orig = original.replace(" ", "")
+    code = re.sub(r"^(PRO|MAG|MODERN) ?", "", compact_value)
+    odd = compact_value.count("Z") + int(
+        compact_value.startswith("I") and not compact_orig.startswith("I")
+    )
+    leading_s = int(compact_value.startswith("S") and compact_orig[:1] in "1I")
+    return (-code.count("O"), -odd, leading_s, len(value))
+
+
+def _model_source_variants(value: str, brand: str | None) -> list[str]:
+    """Варианты, с которых OCR часто начинает Samsung: S→1/18, LS22… → S22…"""
+    compact = re.sub(r"[\s/]+", "", value)
+    variants: list[str] = []
+    for item in (value, compact):
+        if item and item not in variants:
+            variants.append(item)
+    if brand != "SAMSUNG":
+        return variants
+    extra: list[str] = []
+    for src in list(variants):
+        if src[:1] in "1I" and len(src) >= 8:
+            extra.append("S" + src[1:])
+            extra.append("S" + src[2:])
+        if src.startswith("LS") and len(src) >= 9:
+            extra.append(src[1:])
+    for src in extra:
+        if src not in variants:
+            variants.append(src)
+        if len(src) > 9:
+            for length in (8, 9):
+                clipped = src[:length]
+                if clipped not in variants:
+                    variants.append(clipped)
+    return variants
+
+
+def _extract_vendor_model(value: str, brand: str | None) -> str | None:
+    """Достаёт обозначение модели из более длинного кода (LS22B370HS/CI)."""
+    vendor = rules().by_brand(brand) if brand else None
+    if vendor is None or vendor.model_token is None:
+        return None
+    inner = vendor.model_token.pattern
+    if inner.startswith("^") and inner.endswith("$"):
+        inner = inner[1:-1]
+    match = re.search(inner, value)
+    if not match or match.group(0) == value:
+        return None
+    # Обрывок слева должен быть префиксом линейки (L у LS22…, V у VPRO…),
+    # а не случайной цифрой: иначе 1B22B370H даёт ложный B22B370H.
+    if value[: match.start()].isdigit():
+        return None
+    return match.group(0)
 
 
 def match_model_shape(value: str | None) -> tuple[str, str] | None:
@@ -311,6 +376,7 @@ def find_model_candidate(
 
     tokens = re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus)
     tokens += re.findall(r"\b(?:PRO|MAG|MODERN)\s+[A-Z0-9][A-Z0-9\-]{3,20}\b", corpus)
+    tokens += re.findall(r"\b[A-Z]\d{2}\s+\d{2}\b", corpus)
     compact_tokens = [token.replace(" ", "") for token in tokens]
     vendor = rules().by_brand(brand)
     if vendor is not None and vendor.model_token is not None:
@@ -328,10 +394,14 @@ def find_model_candidate(
         polished, _ = polish_model(token, brand)
         if not polished or not _matches_vendor_model(polished, brand):
             continue
-        if brand is None and not any(
-            item.model_token and item.model_token.fullmatch(polished)
-            for item in rules().vendors
-        ) and not rules().common.model_token.fullmatch(polished):
+        if (
+            brand is None
+            and not any(
+                item.model_token and item.model_token.fullmatch(polished)
+                for item in rules().vendors
+            )
+            and not rules().common.model_token.fullmatch(polished)
+        ):
             continue
         counts[polished] = counts.get(polished, 0) + 1
     if not counts:
@@ -350,24 +420,29 @@ def _mapping_options(char: str, pairs: dict[str, str | tuple[str, ...]]) -> tupl
 
 def _confusable_candidates(
     value: str,
-    limit: int = 64,
+    limit: int = 96,
     mapping: dict[str, str | tuple[str, ...]] | None = None,
 ) -> list[str]:
     pairs = mapping or CONFUSABLES
     positions = [i for i, char in enumerate(value) if char in pairs]
-    if not positions or len(positions) > 6:
+    if not positions or len(positions) > 8:
         return []
-    options = [_mapping_options(value[i], pairs) for i in positions]
+    alternatives = [_mapping_options(value[i], pairs)[1:] for i in positions]
     candidates: list[str] = []
-    for combo in product(*options):
-        chars = list(value)
-        for index, char in zip(positions, combo, strict=False):
-            chars[index] = char
-        candidate = "".join(chars)
-        if candidate != value:
-            candidates.append(candidate)
-        if len(candidates) >= limit:
-            break
+    for count in range(1, len(positions) + 1):
+        for which in combinations(range(len(positions)), count):
+            pools = [alternatives[index] for index in which]
+            if any(not pool for pool in pools):
+                continue
+            for combo in product(*pools):
+                chars = list(value)
+                for index, char in zip(which, combo, strict=True):
+                    chars[positions[index]] = char
+                candidate = "".join(chars)
+                if candidate != value:
+                    candidates.append(candidate)
+                if len(candidates) >= limit:
+                    return candidates
     return candidates
 
 

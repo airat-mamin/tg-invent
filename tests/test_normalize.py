@@ -60,14 +60,17 @@ def test_regex_extracts_dell_fields():
 
 def test_regex_tolerates_label_variants():
     variants = [
-        "SERIAL NO. ABC12345",
-        "SN: ABC12345",
-        "S/N ABC12345",
-        "SERIAL NUMBER: ABC12345",
+        ("SERIAL NO. ABC12345", "ABC12345"),
+        ("SN: ABC12345", "ABC12345"),
+        ("S/N ABC12345", "ABC12345"),
+        ("SERIAL NUMBER: ABC12345", "ABC12345"),
+        ("SERIOL NUMBER: V9-04T4BB", "V9-04T4BB"),
+        ("SERAL NO 1166911418964", "1166911418964"),
+        ("KOMEP : 2 433HLNC8QQ394F", "2 433HLNC8QQ394F"),
     ]
-    for variant in variants:
-        match = nz.serial_label().search(nz.clean_text(variant))
-        assert match is not None and match.group(1) == "ABC12345", variant
+    for text, expected in variants:
+        match = nz.serial_label().search(nz.clean_text(text))
+        assert match is not None and match.group(1) == expected, text
 
 
 def test_dell_ppid_reveals_brand():

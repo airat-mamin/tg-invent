@@ -1,0 +1,7 @@
+brand: IIYAMA
+aliases: [IIYAMA, IIYAMA CORPORATION]
+
+model:
+  # ProLite: две буквы линейки, диагональ, буквы матрицы и опциональный цвет.
+  # Пример с наклейки: XB2474HS-B2, также XB2474HS, XU2492HSU, PL2474H.
+  token_pattern: '^[A-Z]{2}\d{4}[A-Z]{1,3}(?:-[A-Z]\d)?$'

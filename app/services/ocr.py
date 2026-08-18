@@ -13,7 +13,7 @@ from app.services.preprocess import ImageVariants
 
 logger = logging.getLogger(__name__)
 
-SERIAL_LABEL = re.compile(r"(?:S[/\\.\s]?N|SERIAL)\s*[:.#№]?\s*$")
+SERIAL_LABEL = re.compile(r"(?:S[/\\.\s]?N|SERI?(?:AL|OL)|KOMEP)\s*[:.#№,;]?\s*$")
 TAG_LABEL = re.compile(r"(?:SERVICE\s*TAG|SERVICE\s*CODE|\bS[/\\.]?T)\s*[:.#№]?\s*$")
 MODEL_LABEL = re.compile(
     r"(?:MODEL(?:\s*(?:NO\.?|NAME|ID))?|\bMDL\b|MONEN[BE8H]|MONEL[BL]?|MODELL?)\s*[:.#№;|]*\s*$"
@@ -253,9 +253,7 @@ def parse_blocks(raw_blocks: list[Block]) -> Card | None:
         # Со штрихкода короткие значения принимаются: там источник надёжный.
         serial, printed_serial, serial_fixed = None, None, serial_fixed and bool(tag)
     brand = nz.match_brand(corpus) or nz.infer_brand_from_serial(serial)
-    model, model_fixed = nz.polish_model(
-        find(nz.model_label(), MODEL_LABEL), brand
-    )
+    model, model_fixed = nz.polish_model(find(nz.model_label(), MODEL_LABEL), brand)
     if not model:
         model = nz.find_model_candidate(corpus, exclude=(serial, tag), brand=brand)
         model_fixed = False
@@ -297,8 +295,8 @@ def scan(variants: ImageVariants) -> tuple[Card | None, str]:
             best = card
     combined = " ".join(texts)
     if best is not None and combined:
-        best.brand = best.brand or nz.match_brand(combined) or nz.infer_brand_from_serial(
-            best.serial_number
+        best.brand = (
+            best.brand or nz.match_brand(combined) or nz.infer_brand_from_serial(best.serial_number)
         )
         serial, serial_fixed = nz.polish_serial(best.serial_number)
         if serial:

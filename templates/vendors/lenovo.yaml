@@ -1,0 +1,7 @@
+brand: LENOVO
+aliases: [LENOVO, LENOVO GROUP]
+
+model:
+  # ThinkVision: буква линейки (не O — так OCR читает ноль в дате 2019-08),
+  # диагональ и поколение. Примеры: E24-10, T24I-10.
+  token_pattern: '^[A-NP-Z]\d{2}[A-Z]?-\d{2}$'
