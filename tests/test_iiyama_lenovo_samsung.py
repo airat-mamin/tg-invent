@@ -41,7 +41,9 @@ def test_samsung_s22_from_garbled_ocr():
     assert nz.find_model_candidate(text, brand="SAMSUNG") == "S22B370H"
 
 
-def test_samsung_serial_is_read_after_komep():
+def test_samsung_q_in_serial_is_zero():
+    assert nz.polish_serial("2433HLNC8QQ394F") == ("2433HLNC800394F", True)
+    assert nz.rules().match_serial("2133HLNC800394F").brand == "SAMSUNG"
     blocks = [
         Block("SAMSUNG", 0.99, 10, 10, 120, 40),
         Block("S22B370H", 0.8, 10, 50, 160, 80),
@@ -51,7 +53,7 @@ def test_samsung_serial_is_read_after_komep():
     assert card is not None
     assert card.brand == "SAMSUNG"
     assert card.model == "S22B370H"
-    assert card.serial_number.replace("Q", "0") == "2433HLNC800394F"
+    assert card.serial_number == "2433HLNC800394F"
 
 
 def test_lenovo_thinkvision_model_and_serial():

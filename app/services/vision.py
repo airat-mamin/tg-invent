@@ -107,6 +107,16 @@ def barcode_payloads_from_text(text: str) -> list[str]:
         letters = sum(character.isalpha() for character in compact)
         digits = sum(character.isdigit() for character in compact)
         if serial and nz.rules().match_serial(serial) is not None:
+            vendor = nz.rules().match_serial(serial)
+            rules_s = vendor.serial if vendor is not None else None
+            # Короткий Lenovo S/N (V904T4BB) совпадает с Type No вроде L8228370.
+            if (
+                rules_s is not None
+                and rules_s.short is not None
+                and rules_s.short.fullmatch(serial)
+                and rules_s.pattern.match(serial) is None
+            ):
+                continue
             payload = serial
         elif tag and letters >= 3 and digits >= 2:
             payload = tag

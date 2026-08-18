@@ -66,7 +66,7 @@ def test_barcode_payloads_from_lenovo_text():
     )
     payloads = vision.barcode_payloads_from_text(text)
     assert "61B7JAR6WWV904T4BB" in payloads
-    assert "V904T4BB" in payloads
+    assert "V904T4BB" not in payloads
     assert "MONITOR" not in payloads
     assert "2019-08-16" not in payloads
     assert "00PC193" not in payloads
@@ -88,7 +88,27 @@ def test_overlay_prefers_full_lenovo_barcode_line():
     assert card.barcode_payloads == payloads
 
 
-def test_card_from_vision_text_returns_none_without_identifiers():
+def test_type_no_is_not_taken_as_lenovo_barcode():
+    text = (
+        "SAMSUNG Model: S22B370H Type No: L8228370 "
+        "S/N / Серийный номер: 2133HLNC800394F"
+    )
+    payloads = vision.barcode_payloads_from_text(text)
+    assert "L8228370" not in payloads
+    assert "2133HLNC800394F" in payloads
+
+
+def test_samsung_vision_text_takes_sn_not_type_no():
+    text = (
+        "SAMSUNG Color Display Unit Model/ Модель: 32237ОН "
+        "Тип на: L8228370 Model Code: LS22B370HS/CI "
+        "S/N / Серийный номер: 2133HLNC800394F"
+    )
+    card = vision.card_from_vision_text(text, [Block(text, 0.9, 0, 0, 400, 80)])
+    card = vision._overlay_barcode_payloads(card, vision.barcode_payloads_from_text(text))
+    assert card is not None
+    assert card.serial_number == "2133HLNC800394F"
+    assert card.serial_number != "L8228370"
     assert vision.card_from_vision_text("DELL MADE IN CHINA", []) is None
 
 

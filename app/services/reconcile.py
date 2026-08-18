@@ -1,6 +1,6 @@
 """Сверка карточки контуров №0/№1 с облачным OCR Cloud Vision."""
 
-from app.models import FIELD_TITLES, Card, Confidence
+from app.models import FIELD_TITLES, Card, Confidence, Source
 from app.services import normalize as nz
 
 COMPARED_FIELDS = ("brand", "model", "serial_number", "service_tag")
@@ -9,7 +9,9 @@ COMPARED_FIELDS = ("brand", "model", "serial_number", "service_tag")
 def _compact(value: str | None) -> str:
     if not value:
         return ""
-    canonical = nz.canonical_serial(nz.normalize_identifier(value)) or ""
+    ident = nz.normalize_identifier(value)
+    polished, _ = nz.polish_serial(ident)
+    canonical = nz.canonical_serial(polished or ident) or ""
     return canonical.replace("-", "")
 
 
@@ -24,7 +26,14 @@ def serials_agree(left: str | None, right: str | None) -> bool:
     if len(shorter) < 8:
         return False
     extracted = nz.inventory_serial(longer) or ""
-    return longer.endswith(shorter) or _compact(extracted) == shorter
+    if longer.endswith(shorter) or _compact(extracted) == shorter:
+        return True
+    # Один формат, отличаются первые символы (2/4, Q/0) — хвост серийника тот же.
+    if len(first) == len(second) >= 12 and first[4:] == second[4:]:
+        left_v, right_v = nz.rules().match_serial(first), nz.rules().match_serial(second)
+        if left_v is not None and right_v is not None and left_v.brand == right_v.brand:
+            return True
+    return False
 
 
 def values_agree(field: str, left: str | None, right: str | None) -> bool:
@@ -78,12 +87,26 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
                 confirmed.append(title)
                 if field == "serial_number":
                     chosen = prefer_serial(current, other)
+                    current_c, other_c = _compact(current), _compact(other)
+                    # EasyOCR часто путает цифры в начале Samsung S/N; хвост тот же —
+                    # берём более чистую строку Cloud Vision, но не трогаем штрихкод.
+                    if (
+                        primary.source is Source.OCR
+                        and len(current_c) == len(other_c) >= 12
+                        and current_c[4:] == other_c[4:]
+                        and current_c != other_c
+                    ):
+                        chosen = other
                     if chosen != current:
-                        primary.serial_number = nz.canonical_serial(chosen)
+                        polished, _ = nz.polish_serial(chosen)
+                        primary.serial_number = nz.canonical_serial(polished or chosen)
                         primary.serial_display = nz.display_serial(
                             primary.serial_number, vision.serial_display or chosen
                         )
-                        filled.append(f"{title} (полный номер из Cloud Vision)")
+                        if len(_compact(chosen)) > len(_compact(current)):
+                            filled.append(f"{title} (полный номер из Cloud Vision)")
+                        else:
+                            filled.append(f"{title} (уточнил Cloud Vision)")
             else:
                 conflicts.append(title)
         elif other and not current:

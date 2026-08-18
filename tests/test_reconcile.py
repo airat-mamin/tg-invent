@@ -101,6 +101,27 @@ def test_reconcile_notes_matching_barcode_payload():
     assert result.serial_number == "61B7JAR6WWV904T4BB"
 
 
+def test_reconcile_prefers_cleaner_samsung_serial_from_vision():
+    primary = Card(
+        brand="SAMSUNG",
+        model="S22B370H",
+        serial_number="2433HLNC8QQ394F",
+        source=Source.OCR,
+        confidence=Confidence.MEDIUM,
+    )
+    extra = Card(
+        brand="SAMSUNG",
+        model="S22B370H",
+        serial_number="2133HLNC800394F",
+        source=Source.VISION,
+        barcode_payloads=["2133HLNC800394F"],
+    )
+    result = reconcile.reconcile(primary, extra)
+    assert result.serial_number == "2133HLNC800394F"
+    assert any("уточнил Cloud Vision" in note for note in result.notes)
+    assert any("подтвердил штрихкод: 2133HLNC800394F" in note for note in result.notes)
+
+
 def test_render_card_shows_vision_notes():
     card = Card(serial_number="ABC12345", notes=["Cloud Vision подтвердил: Серийный номер"])
     assert "Cloud Vision подтвердил: Серийный номер" in render_card(card)
