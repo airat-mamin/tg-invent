@@ -13,6 +13,8 @@ def test_shipped_templates_load():
     assert registry.by_brand("MSI") is not None
     assert registry.by_brand("BENQ") is not None
     assert registry.by_brand("HP") is not None
+    assert registry.by_brand("ACER") is not None
+    assert registry.by_brand("IRBIS") is not None
     assert "SAMSUNG" in registry.brand_names
 
 

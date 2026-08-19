@@ -55,11 +55,11 @@ model:
   # Помимо посторонних обозначений сюда входят обрывки самих меток: их легко
   # принять за значение, если метка на наклейке набрана в несколько слов.
   stopwords:
-    [CCC, CE, FCC, EAC, HF, XY, AC, DC, HZ, USB, HDMI, LED, LCD, ID, NO, NAME, MDL, SN, PN, RATING, MONITOR, SERIAL, CAUTION, CLASS, POWER, PRODUCT, DISPLAY, COLOR]
+    [CCC, CE, FCC, EAC, HF, XY, AC, DC, HZ, USB, HDMI, LED, LCD, ID, NO, NAME, MDL, SN, PN, RATING, MONITOR, SERIAL, CAUTION, CLASS, POWER, PRODUCT, DISPLAY, COLOR, VERSION, NUMBER, DATE, TYPE, REV]
 
 # Что не является идентификатором оборудования.
 noise:
-  labels: \b(P/?N|PART\s*(?:NO|NUMBER)|FRU|MTM|CHASSIS|FCC\s*ID|EAC|MAC|REV|LOT|BOM)\b
+  labels: \b(P/?N|PART\s*(?:NO|NUMBER)|PRODUCT\s*NO|FRU|MTM|CHASSIS|FCC\s*ID|EAC|MAC|REV|LOT|BOM)\b
   mac_address: \b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b
   # Значения в кавычках: без них YAML превращает NULL в пустое значение.
   values: ["NULL", "NONE", "N/A", "NA", "-", "—", "UNKNOWN", "NOTFOUND", "NOT FOUND"]

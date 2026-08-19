@@ -13,8 +13,8 @@ from app.config import settings
 from app.services.vendors import Registry, load_registry
 
 CYRILLIC_TO_LATIN = str.maketrans(
-    "АВЕКМНОРСТУХасеорхуѕ",
-    "ABEKMHOPCTYXaceopxys",
+    "АВЕКМНОРСТУХасеорхуѕØø",
+    "ABEKMHOPCTYXaceopxys00",
 )
 
 # Пары символов, которые OCR путает между собой.
@@ -48,7 +48,9 @@ MODEL_CONFUSABLES: dict[str, str | tuple[str, ...]] = {
     "7": "T",
 }
 DATE_LIKE = re.compile(r"^\d{4}-\d{2}(?:-\d{2})?$")
-SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN)(?=[A-Z])")
+SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN|SMARTVIEW)(?=[A-Z0-9])")
+GTIN_LENGTHS = frozenset({8, 12, 13, 14})
+PRODUCT_SKU = re.compile(r"^\d[A-Z]{2}\d{2}[A-Z]{2}$")
 
 
 @lru_cache(maxsize=1)
@@ -79,14 +81,69 @@ def normalize_identifier(value: str | None) -> str | None:
     return cleaned or None
 
 
+def is_gtin(value: str | None) -> bool:
+    """EAN/UPC с верной контрольной суммой. На Acer это штрихкод под настоящим S/N.
+
+    13 цифр без контрольной суммы (iiyama 1166911418964) — обычный серийник.
+    """
+    if not value or not value.isdigit() or len(value) not in GTIN_LENGTHS:
+        return False
+    digits = [int(char) for char in value]
+    body, check = digits[:-1], digits[-1]
+    total = 0
+    for index, digit in enumerate(reversed(body), start=1):
+        total += digit * (3 if index % 2 else 1)
+    return (10 - (total % 10)) % 10 == check
+
+
+def is_product_sku(value: str | None) -> bool:
+    """Артикул HP вида 7VH44AA / 8MB11AA / 3NS59AA — не серийник и не Service Tag."""
+    return bool(value) and PRODUCT_SKU.fullmatch(value) is not None
+
+
 def is_valid_service_tag(value: str | None) -> bool:
-    return bool(value) and rules().common.valid_service_tag.fullmatch(value or "") is not None
+    if not value or rules().common.valid_service_tag.fullmatch(value) is None:
+        return False
+    if is_product_sku(value) or _exact_vendor_model(value):
+        return False
+    return True
 
 
 def is_valid_serial(value: str | None) -> bool:
     if not value or not rules().common.valid_serial.fullmatch(value):
         return False
-    return any(char.isdigit() for char in value)
+    if not any(char.isdigit() for char in value):
+        return False
+    if is_gtin(value) or is_product_sku(value) or _exact_vendor_model(value):
+        return False
+    return True
+
+
+def _serial_of_brand(value: str, brand: str | None) -> bool:
+    """Токен — серийник этого производителя. Чужой короткий формат (Lenovo)
+    не должен выбивать модель Samsung S22B370H."""
+    vendor = rules().match_serial(value)
+    if vendor is None:
+        return False
+    expected = rules().by_brand(brand) if brand else None
+    if expected is None:
+        return True
+    return vendor.brand == expected.brand
+
+
+def _looks_like_serial_token(token: str) -> bool:
+    """Длинный номер с кучей цифр — серийник, даже если формат чуть не сошёлся."""
+    compact = re.sub(r"[^A-Z0-9]", "", token)
+    return len(compact) >= 12 and sum(char.isdigit() for char in compact) >= 5
+
+
+def _exact_vendor_model(value: str) -> bool:
+    """Модель по шаблону как есть, без подбора OCR-замен — иначе Service Tag Dell
+    вроде 84ZCSF3 превращается в модель Philips."""
+    return any(
+        vendor.model_token is not None and vendor.model_token.fullmatch(value)
+        for vendor in rules().vendors
+    )
 
 
 def is_valid_model(value: str | None) -> bool:
@@ -186,8 +243,8 @@ def find_serial_payload(text: str) -> str | None:
     if not text:
         return None
     glued = glue_hyphen_continuations(text)
-    tokens = re.findall(r"\b[A-Z0-9]{12,24}\b", clean_text(text))
-    tokens += re.findall(r"\b[A-Z0-9]{12,24}\b", glued.replace("-", ""))
+    tokens = re.findall(r"\b[A-Z0-9]{10,24}\b", clean_text(text))
+    tokens += re.findall(r"\b[A-Z0-9]{10,24}\b", glued.replace("-", ""))
     tokens += re.findall(
         r"\b(?:CN|MY|TW|SG|MX|BR|IN|PH|TH|CZ|IE)-[A-Z0-9-]{10,28}",
         glued,
@@ -296,6 +353,8 @@ def polish_model(value: str | None, brand: str | None = None) -> tuple[str | Non
     normalized = normalize_value(value)
     if normalized is None or _looks_like_date(normalized):
         return None, False
+    if normalized in rules().common.model_stopwords or normalized in rules().brand_names:
+        return None, False
     matches: list[tuple[str, bool]] = []
     seen: set[str] = set()
     for source in _model_source_variants(normalized, brand):
@@ -325,6 +384,7 @@ def polish_model(value: str | None, brand: str | None = None) -> tuple[str | Non
 def _pretty_model(value: str) -> str:
     """Ставит пробел после серии и дефис в ThinkVision E24 10 → E24-10."""
     value = SERIES_PREFIX.sub(r"\1 ", value)
+    value = re.sub(r"^([A-Z]\d{2,3}[A-Z]\d?)(G\d)$", r"\1 \2", value)
     return re.sub(r"^([A-Z]\d{2}) (\d{2})$", r"\1-\2", value)
 
 
@@ -427,7 +487,9 @@ def find_model_candidate(
     counts: dict[str, int] = {}
 
     tokens = re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus)
-    tokens += re.findall(r"\b(?:PRO|MAG|MODERN)\s+[A-Z0-9][A-Z0-9\-]{3,20}\b", corpus)
+    tokens += re.findall(
+        r"\b(?:PRO|MAG|MPG|MODERN|SMARTVIEW)\s+[A-Z0-9][A-Z0-9\-]{1,20}\b", corpus
+    )
     tokens += re.findall(r"\b[A-Z]\d{2}\s+\d{2}\b", corpus)
     compact_tokens = [token.replace(" ", "") for token in tokens]
     vendor = rules().by_brand(brand)
@@ -435,11 +497,37 @@ def find_model_candidate(
         inner = vendor.model_token.pattern
         if inner.startswith("^") and inner.endswith("$"):
             inner = inner[1:-1]
+        bounded = re.compile(r"\b(?:" + inner + r")\b")
         for token in compact_tokens:
-            tokens += [match.group(0) for match in re.finditer(inner, token)]
+            serial_like, _ = polish_serial(token)
+            if (
+                is_product_sku(token)
+                or is_gtin(token)
+                or _looks_like_serial_token(token)
+                or _serial_of_brand(serial_like or token, brand)
+            ):
+                continue
+            if re.fullmatch(inner, token):
+                tokens.append(token)
+                continue
+            for match in re.finditer(inner, token):
+                # VPROMP275OPG → PROMP275OPG; не вырезать E76Y из HFNKE76YH1HPHN.
+                if match.start() <= 1:
+                    tokens.append(match.group(0))
+        tokens += [match.group(0) for match in bounded.finditer(corpus)]
 
     for token in tokens:
         if token in rules().common.model_stopwords or token in rules().brand_names:
+            continue
+        if "/" in token or token.isdigit():
+            continue
+        serial_like, _ = polish_serial(token)
+        if (
+            is_product_sku(token)
+            or is_gtin(token)
+            or _looks_like_serial_token(token)
+            or _serial_of_brand(serial_like or token, brand)
+        ):
             continue
         if any(token in value or value in token for value in blocked if value):
             continue
@@ -458,10 +546,36 @@ def find_model_candidate(
         counts[polished] = counts.get(polished, 0) + 1
     if not counts:
         return None
+    collapsed = _collapse_model_aliases(counts)
     prefer_long = vendor is not None and vendor.model_token is not None
-    length_key = (lambda token: len(token)) if prefer_long else (lambda token: -len(token))
-    best = max(counts, key=lambda token: (counts[token], length_key(token)))
+    length_key = (
+        (lambda token: len(token.replace(" ", ""))) if prefer_long else (lambda token: -len(token))
+    )
+    best = max(collapsed, key=lambda token: (collapsed[token], length_key(token)))
     return best if is_valid_model(best) else None
+
+
+def _collapse_model_aliases(counts: dict[str, int]) -> dict[str, int]:
+    """Склеивает PROMP275QPG с PRO MP275QPG и отбрасывает P24H, если есть P24H G4."""
+    groups: dict[str, list[tuple[str, int]]] = {}
+    for token, count in counts.items():
+        groups.setdefault(token.replace(" ", ""), []).append((token, count))
+    merged: dict[str, int] = {}
+    for items in groups.values():
+        winner = max(items, key=lambda item: (" " in item[0], len(item[0]), item[1]))[0]
+        merged[winner] = sum(count for _, count in items)
+    compact = {token: token.replace(" ", "") for token in merged}
+    filtered = {
+        token: count
+        for token, count in merged.items()
+        if not any(
+            other != token
+            and compact[other].startswith(compact[token])
+            and len(compact[other]) > len(compact[token])
+            for other in merged
+        )
+    }
+    return filtered or merged
 
 
 def _mapping_options(char: str, pairs: dict[str, str | tuple[str, ...]]) -> tuple[str, ...]:

@@ -25,6 +25,19 @@ def test_service_tag_validation():
     assert not nz.is_valid_service_tag("9YSC-F3")
 
 
+def test_ean_and_hp_sku_are_not_identifiers():
+    assert nz.is_gtin("4712196183660")
+    assert not nz.is_valid_serial("4712196183660")
+    assert nz.is_valid_serial("1166911418964")
+    assert nz.is_product_sku("7VH44AA")
+    assert nz.is_product_sku("8MB11AA")
+    assert nz.is_product_sku("3NS59AA")
+    assert not nz.is_valid_service_tag("7VH44AA")
+    assert not nz.is_valid_serial("7VH44AA")
+    assert not nz.is_valid_service_tag("GW2475H")
+    assert not nz.is_valid_serial("GW2475H")
+
+
 def test_serial_validation_requires_digit():
     assert nz.is_valid_serial("CN0Y71R3TV20019B13QT")
     assert nz.is_valid_serial("ABC-1234")

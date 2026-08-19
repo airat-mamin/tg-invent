@@ -118,9 +118,9 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
                 # верный серийник. Если облако читает ту же этикетку и модель не
                 # была в штрихкоде — берём маркетинговое имя Cloud Vision.
                 if (
-                    field == "model"
+                    field in {"model", "brand"}
                     and serials_agree(primary.serial_number, vision.serial_number)
-                    and not model_from_barcode(primary)
+                    and not (field == "model" and model_from_barcode(primary))
                 ):
                     setattr(primary, field, other)
                     filled.append(f"{title} (уточнил Cloud Vision)")

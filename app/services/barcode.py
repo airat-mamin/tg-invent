@@ -217,10 +217,13 @@ def card_from_payloads(payloads: list[str]) -> Card | None:
                 serial_from_vendor = serial_from_vendor or vendor_hit
             elif vendor_hit and len(found_serial) > len(serial or ""):
                 serial = found_serial
-        if model is None and value:
-            match = nz.match_model_shape(value)
-            if match is not None:
-                brand, model = match
+        # Серийник и Service Tag сами по себе не модель: CNC2480XG3 похож на Dell,
+        # а 7VH44AA — артикул HP. Модель ищем только в остальных строках штрихкода.
+        if model is None and value and not found_serial and not found_tag:
+            if not nz.is_product_sku(value) and not nz.is_gtin(value):
+                match = nz.match_model_shape(value)
+                if match is not None:
+                    brand, model = match
 
     if service_tag is None and serial is None:
         return None
