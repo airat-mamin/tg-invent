@@ -50,6 +50,13 @@ def values_agree(field: str, left: str | None, right: str | None) -> bool:
     return _compact(left) == _compact(right)
 
 
+def model_from_barcode(card: Card) -> bool:
+    """Модель взята из полезной нагрузки штрихкода, а не из OCR рядом с ним."""
+    if not card.model:
+        return False
+    return any(values_agree("model", card.model, payload) for payload in card.barcode_payloads)
+
+
 def prefer_serial(primary: str | None, extra: str | None) -> str | None:
     if extra and not primary:
         return extra
@@ -64,9 +71,8 @@ def prefer_serial(primary: str | None, extra: str | None) -> str | None:
 def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
     """Оставляет результат первого контура, дополняет пустое и отмечает совпадения.
 
-    Штрихкод и EasyOCR — источник истины при конфликте. Cloud Vision может
-    подтвердить те же значения, заполнить пробелы или отдать карточку, если
-    первые контуры ничего не собрали.
+    Штрихкод — источник истины, если модель или серийник были в его строке.
+    Иначе при том же серийнике модель Cloud Vision точнее мусора EasyOCR.
     """
     if vision is None:
         return primary
@@ -108,7 +114,18 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
                         else:
                             filled.append(f"{title} (уточнил Cloud Vision)")
             else:
-                conflicts.append(title)
+                # EasyOCR часто подставляет мусор в модель, пока штрихкод уже дал
+                # верный серийник. Если облако читает ту же этикетку и модель не
+                # была в штрихкоде — берём маркетинговое имя Cloud Vision.
+                if (
+                    field == "model"
+                    and serials_agree(primary.serial_number, vision.serial_number)
+                    and not model_from_barcode(primary)
+                ):
+                    setattr(primary, field, other)
+                    filled.append(f"{title} (уточнил Cloud Vision)")
+                else:
+                    conflicts.append(title)
         elif other and not current:
             if field == "serial_number":
                 primary.serial_number = nz.canonical_serial(other)

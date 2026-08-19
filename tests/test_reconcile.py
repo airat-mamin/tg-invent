@@ -53,6 +53,50 @@ def test_reconcile_fills_empty_fields():
     assert any("дополнил" in note for note in result.notes)
 
 
+def test_reconcile_takes_vision_model_when_serials_agree():
+    """Штрихкод дал серийник, OCR подставил мусор в модель — Cloud Vision точнее."""
+    primary = Card(
+        brand="MSI",
+        model="BZ418UALONC",
+        serial_number="PD6T086500464",
+        source=Source.BARCODE,
+        confidence=Confidence.MEDIUM,
+        barcode_payloads=["PD6T086500464"],
+    )
+    extra = Card(
+        brand="MSI",
+        model="PRO MP272L",
+        serial_number="PD6T086500464",
+        source=Source.VISION,
+        barcode_payloads=["PD6T086500464"],
+    )
+    result = reconcile.reconcile(primary, extra)
+    assert result.model == "PRO MP272L"
+    assert result.serial_number == "PD6T086500464"
+    assert any("Модель (уточнил Cloud Vision)" in note for note in result.notes)
+    assert not any("расходится" in note for note in result.notes)
+
+
+def test_reconcile_keeps_barcode_model_when_payload_has_it():
+    primary = Card(
+        brand="PHILIPS",
+        model="246V5LSB/01",
+        serial_number="AU0A1718003418",
+        source=Source.BARCODE,
+        confidence=Confidence.HIGH,
+        barcode_payloads=["246V5LSB/01", "AU0A1718003418"],
+    )
+    extra = Card(
+        brand="PHILIPS",
+        model="246V5LSB",
+        serial_number="AU0A1718003418",
+        source=Source.VISION,
+    )
+    result = reconcile.reconcile(primary, extra)
+    assert result.model == "246V5LSB/01"
+    assert any("расходится" in note for note in result.notes)
+
+
 def test_reconcile_keeps_primary_on_conflict():
     primary = Card(
         brand="DELL",

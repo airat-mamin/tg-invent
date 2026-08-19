@@ -21,6 +21,7 @@ serial:
       replacement: "1"
 
 model:
-  # На наклейке два обозначения: короткое MODEL NAME (3PC3) и маркетинговое
-  # имя, которое нужно в инвентаризации: PRO MP275QPG, MAG 274QRF, G274QPF.
-  token_pattern: '^(?:(?:PRO|MAG|MODERN) ?[A-Z]{0,3}\d{3}[A-Z]{0,6}|(?:MP|MD|G)\d{3}[A-Z]{0,4}|[A-Z]{2,3}\d{3}[A-Z]{2,6})$'
+  # На наклейке два обозначения: короткое MODEL NAME (3PC3 / 3PD6) и маркетинговое
+  # имя, которое нужно в инвентаризации: PRO MP272L, PRO MP275QPG, MAG 274QRF, G274QPF.
+  # Третий «широкий» вариант [A-Z]{2,3}\d{3}[A-Z]{2,6} принимал мусор OCR вроде BZ418UALONC.
+  token_pattern: '^(?:(?:PRO|MAG|MPG|MODERN) ?[A-Z]{0,3}\d{3}[A-Z]{0,6}|(?:MP|MD|G)\d{3}[A-Z]{0,4})$'
