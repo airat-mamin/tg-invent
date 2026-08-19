@@ -161,3 +161,32 @@ def test_acer_ean_is_not_serial():
     assert parsed.brand == "ACER"
     assert parsed.model == "V235HL"
     assert parsed.serial_number == "MMLV4EE009235009534204"
+
+
+def test_asus_vw226tl_label():
+    """Живой шильдик ASUS: модель VW226TL, S/N B8LMQS065420, OCR даёт 88LMQS… и NI3219."""
+    assert rules().match_serial("B8LMQS065420").brand == "ASUS"
+    assert nz.polish_serial("88LMQS065420") == ("B8LMQS065420", True)
+    assert nz.polish_model("NI3219", "ASUS") == (None, False)
+    assert nz.polish_model("VW226TL", "ASUS") == ("VW226TL", False)
+    text = (
+        "ASUS LCD MONITOR MODEL NO. VW226 VERSION NO.: VW226TL "
+        "S/N: 88LMQS065420 8202 N13219 R31018 ASUSTEK COMPUTER INC."
+    )
+    assert nz.match_brand(text) == "ASUS"
+    assert nz.find_model_candidate(text, brand="ASUS") == "VW226TL"
+    blocks = [
+        Block("ASUS", 0.9, 10, 10, 80, 40),
+        Block("VW226 Version No.: VW226TL", 0.8, 10, 50, 360, 90),
+        Block("S/N: 88LMQS065420", 0.95, 10, 140, 300, 180),
+        Block("8202 N13219 R31018", 0.4, 10, 200, 280, 230),
+    ]
+    card = parse_blocks(blocks)
+    assert card is not None
+    assert card.brand == "ASUS"
+    assert card.model == "VW226TL"
+    assert card.serial_number == "B8LMQS065420"
+    vision = card_from_vision_text(text, blocks)
+    assert vision is not None
+    assert vision.model == "VW226TL"
+    assert vision.serial_number == "B8LMQS065420"

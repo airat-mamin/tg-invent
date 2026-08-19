@@ -15,6 +15,7 @@ def test_shipped_templates_load():
     assert registry.by_brand("HP") is not None
     assert registry.by_brand("ACER") is not None
     assert registry.by_brand("IRBIS") is not None
+    assert registry.by_brand("ASUS") is not None
     assert "SAMSUNG" in registry.brand_names
 
 
