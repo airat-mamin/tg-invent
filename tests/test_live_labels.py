@@ -240,29 +240,32 @@ def test_benq_gw2480_ocr_then_vision_serial() -> None:
 
 
 def test_ssn24_label_from_cyrillic_model() -> None:
-    """Живой шильдик: Модель:SSN-24, S/N SHQUN23616001465."""
-    assert rules().match_serial("SHQUN23616001465").brand == "SSN"
-    assert nz.polish_model("SSN-24", "SSN") == ("SSN-24", False)
+    """Живой шильдик Huawei: Модель:SSN-24, S/N SHQUN23616001465."""
+    assert rules().match_serial("SHQUN23616001465").brand == "HUAWEI"
+    assert nz.polish_model("SSN-24", "HUAWEI") == ("SSN-24", False)
     text = "S/N:SHQUN23616001465 Модель:SSN-24 HDMI CE EAC CCC"
-    assert nz.match_brand(text) == "SSN"
+    assert nz.match_brand(text) is None
+    assert nz.find_model_candidate(text, brand="HUAWEI") == "SSN-24"
     blocks = [
         Block("S/N:SHQUN23616001465", 0.95, 10, 10, 320, 40),
         Block("Модель:SSN-24", 0.9, 330, 10, 480, 40),
     ]
     card = parse_blocks(blocks)
     assert card is not None
-    assert card.brand == "SSN"
+    assert card.brand == "HUAWEI"
     assert card.model == "SSN-24"
     assert card.serial_number == "SHQUN23616001465"
     vision = card_from_vision_text(text, blocks)
     assert vision is not None
+    assert vision.brand == "HUAWEI"
     assert vision.model == "SSN-24"
     assert vision.serial_number == "SHQUN23616001465"
     barcode_card = barcode.card_from_payloads(["SHQUN23616001465"])
     assert barcode_card is not None
-    assert barcode_card.brand == "SSN"
+    assert barcode_card.brand == "HUAWEI"
     assert barcode_card.serial_number == "SHQUN23616001465"
     filled = reconcile.reconcile(barcode_card, vision)
+    assert filled.brand == "HUAWEI"
     assert filled.model == "SSN-24"
 
 
