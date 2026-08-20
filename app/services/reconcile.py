@@ -71,6 +71,25 @@ def values_agree(field: str, left: str | None, right: str | None) -> bool:
     return _compact(left) == _compact(right)
 
 
+def prefer_specific_model(current: str | None, other: str | None, brand: str | None) -> str | None:
+    """Между Type GW2480 и Model ID GW2480-T оставляет более полное имя."""
+    first, _ = nz.polish_model(current, brand)
+    second, _ = nz.polish_model(other, brand)
+    if first and not second:
+        return first
+    if second and not first:
+        return second
+    if not first or not second:
+        return other
+    left = first.replace("-", "").replace(" ", "")
+    right = second.replace("-", "").replace(" ", "")
+    if left.startswith(right) and len(left) > len(right):
+        return first
+    if right.startswith(left) and len(right) > len(left):
+        return second
+    return second
+
+
 def model_from_barcode(card: Card) -> bool:
     """Модель взята из полезной нагрузки штрихкода, а не из OCR рядом с ним."""
     if not card.model:
@@ -156,7 +175,16 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
                     and serials_agree(primary.serial_number, vision.serial_number)
                     and not (field == "model" and model_from_barcode(primary))
                 ):
-                    setattr(primary, field, other)
+                    if field == "model":
+                        chosen = prefer_specific_model(
+                            current, other, primary.brand or vision.brand
+                        )
+                        if chosen == current or nz.polish_model(chosen, primary.brand)[0] == nz.polish_model(current, primary.brand)[0]:
+                            confirmed.append(title)
+                            continue
+                        primary.model = chosen
+                    else:
+                        setattr(primary, field, other)
                     filled.append(f"{title} (уточнил Cloud Vision)")
                 else:
                     conflicts.append(title)

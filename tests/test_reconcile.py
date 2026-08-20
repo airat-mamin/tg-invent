@@ -54,6 +54,26 @@ def test_reconcile_fills_empty_fields():
     assert any("дополнил" in note for note in result.notes)
 
 
+def test_reconcile_keeps_more_specific_benq_model():
+    """Model ID GW2480-T не затирается Type GW2480 из Cloud Vision."""
+    primary = Card(
+        brand="BENQ",
+        model="GW2480-T",
+        serial_number="ETR4MO2620010",
+        source=Source.OCR,
+        confidence=Confidence.MEDIUM,
+    )
+    extra = Card(
+        brand="BENQ",
+        model="GW2480",
+        serial_number="ETR4M0262001Q",
+        source=Source.VISION,
+    )
+    result = reconcile.reconcile(primary, extra)
+    assert result.model == "GW2480-T"
+    assert result.serial_number == "ETR4M0262001Q"
+
+
 def test_reconcile_takes_vision_model_when_serials_agree():
     """Штрихкод дал серийник, OCR подставил мусор в модель — Cloud Vision точнее."""
     primary = Card(
@@ -117,6 +137,9 @@ def test_reconcile_replaces_generic_barcode_with_vendor_serial():
     assert result.brand == "HUAWEI"
     assert result.model == "MATEVIEW SE"
     assert any("уточнил Cloud Vision" in note for note in result.notes)
+
+
+def test_reconcile_keeps_primary_on_conflict():
     primary = Card(
         brand="DELL",
         serial_number="CN0Y71R3TV20019B13QTA01",
