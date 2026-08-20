@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 SERIAL_LABEL = re.compile(r"(?:S[/\\.\s]?N|SERI?(?:AL|OL)|KOMEP)\s*[:.#№,;]?\s*$")
 TAG_LABEL = re.compile(r"(?:SERVICE\s*TAG|SERVICE\s*CODE|\bS[/\\.]?T)\s*[:.#№]?\s*$")
 MODEL_LABEL = re.compile(
-    r"(?:MODEL(?:\s*(?:NO\.?|NAME|ID))?|\bMDL\b|MONEN[BE8H]|MONEL[BL]?|MODELL?)\s*[:.#№;|]*\s*$"
+    r"(?:MODEL(?:\s*(?:NO\.?|NAME|ID))?|\bMDL\b|MONEN[BE8H]|MONEL[BL]?|MODELL?|MO[DДN]E[LЛN][ЬB]?)\s*[:.#№;|]*\s*$"
 )
 
 # Перенос длинного идентификатора на следующую строку; тильду даёт OCR вместо дефиса.

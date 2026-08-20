@@ -1,0 +1,11 @@
+brand: SSN
+aliases: [SSN]
+
+serial:
+  # Наблюдалось на SSN-24: SHQUN + 11 цифр.
+  pattern: '^SHQUN\d{11}$'
+  length: [16, 16]
+
+model:
+  # Модель:SSN-24 на русской наклейке у разъёмов.
+  token_pattern: '^SSN-?\d{2}(?:BZ)?$'

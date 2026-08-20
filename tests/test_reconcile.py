@@ -11,6 +11,7 @@ def test_serials_agree_on_equal_and_lenovo_suffix():
     assert reconcile.serials_agree("ABC12345", "ABC12345")
     assert not reconcile.serials_agree("ABC12345", "XYZ99999")
     assert not reconcile.serials_agree("SHORT", "61B7JAR6WWV904T4BB")
+    assert reconcile.serials_agree("ETR4MO2620010", "ETR4M0262001Q")
 
 
 def test_reconcile_confirms_and_keeps_longer_serial():
@@ -97,7 +98,25 @@ def test_reconcile_keeps_barcode_model_when_payload_has_it():
     assert any("расходится" in note for note in result.notes)
 
 
-def test_reconcile_keeps_primary_on_conflict():
+def test_reconcile_replaces_generic_barcode_with_vendor_serial():
+    """QR 90106-45981 не формат производителя — берём S/N Cloud Vision."""
+    primary = Card(
+        serial_number="90106-45981",
+        source=Source.BARCODE,
+        confidence=Confidence.HIGH,
+        barcode_payloads=["90106-45981"],
+    )
+    extra = Card(
+        brand="HUAWEI",
+        model="MATEVIEW SE",
+        serial_number="SHQUH22915000579",
+        source=Source.VISION,
+    )
+    result = reconcile.reconcile(primary, extra)
+    assert result.serial_number == "SHQUH22915000579"
+    assert result.brand == "HUAWEI"
+    assert result.model == "MATEVIEW SE"
+    assert any("уточнил Cloud Vision" in note for note in result.notes)
     primary = Card(
         brand="DELL",
         serial_number="CN0Y71R3TV20019B13QTA01",

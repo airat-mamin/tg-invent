@@ -4,12 +4,15 @@ aliases: [BENQ]
 serial:
   # Наблюдалось на GW2475-T и XL2411-B: ET + два символа завода + M + 8 знаков.
   # Примеры: ETW8M00952019, ETM5M02273SL0, ET69M04907019.
-  pattern: '^ET(?:[A-Z]\d|\d{2})M[A-Z0-9]{7}\d$'
+  pattern: '^ET(?:[A-Z]\d|\d{2})M[A-Z0-9]{7}[0-9Q]$'
   length: [13, 13]
   fixes:
     - name: Ø/O вместо нуля в хвосте
       pattern: '[ØO]$'
       replacement: "0"
+    - name: O вместо нуля сразу после M
+      pattern: '^(ET(?:[A-Z]\d|\d{2})M)O'
+      replacement: '\g<1>0'
     - name: S вместо 5 после префикса ET.
       pattern: '^(ET.)S(M)'
       replacement: '\g<1>5\g<2>'

@@ -26,6 +26,7 @@ brands:
   - GIGABYTE
   - DEXP
   - IRBIS
+  - SSN
   - APPLE
   - FUJITSU
   - TOSHIBA
@@ -43,8 +44,10 @@ labels:
   # OCR вроде «SSNATSUNT», и из шума собирается правдоподобный серийный номер.
 
   model: >-
-    (?:MODEL\s*[-–]?\s*(?:NO\.?|NAME|ID)?|\bMDL\b|型号|型號|MONEN[BE8H](?:/[A-Z]{3,12})?|MONEL[BL]?|MODELL?|МОДЕЛЬ|ТИП)[\s:.#№;|]*([A-Z0-9][A-Z0-9\-/]{1,23})\b
+    (?:MODEL\s*[-–]?\s*(?:NO\.?|NAME|ID)?|\bMDL\b|型号|型號|MONEN[BE8H](?:/[A-Z]{3,12})?|MONEL[BL]?|MODELL?|МОДЕЛЬ|MO[DДN]E[LЛN][ЬB]?|ТИП)[\s:.#№;|]*([A-Z0-9][A-Z0-9\-/]{1,23})\b
   # «MODEL ID» — Philips. MONENB/MONENE — типичный OCR «Модель» при языках en.
+  # После clean_text кириллическая «Модель» становится MOДEЛЬ: М/О/Е уходят в
+  # латиницу, Д/Л/Ь остаются. MO[DДN]E[LЛN] ловит и это, и Vision «Mодель:SSN-24».
   # На наклейках DEXP рядом стоит казахское «Үлгісі», которое OCR читает как
   # YNRICI, поэтому после MONENB допускается второе слово через дробь.
 

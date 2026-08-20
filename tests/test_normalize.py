@@ -41,6 +41,7 @@ def test_ean_and_hp_sku_are_not_identifiers():
 def test_serial_validation_requires_digit():
     assert nz.is_valid_serial("CN0Y71R3TV20019B13QT")
     assert nz.is_valid_serial("ABC-1234")
+    assert not nz.is_valid_serial("90106-45981")
     assert not nz.is_valid_serial("ABCDEFGH")
     assert not nz.is_valid_serial("A1")
 

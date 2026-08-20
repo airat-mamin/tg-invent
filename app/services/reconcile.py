@@ -15,6 +15,19 @@ def _compact(value: str | None) -> str:
     return canonical.replace("-", "")
 
 
+_SERIAL_CONFUSABLES = {
+    "0": "OQ",
+    "O": "0Q",
+    "Q": "0O",
+    "8": "B",
+    "B": "8",
+    "5": "S",
+    "S": "5",
+    "1": "I",
+    "I": "1",
+}
+
+
 def serials_agree(left: str | None, right: str | None) -> bool:
     """Совпадение или один номер — хвост другого (Lenovo MTM+S/N и короткий S/N)."""
     first, second = _compact(left), _compact(right)
@@ -28,10 +41,18 @@ def serials_agree(left: str | None, right: str | None) -> bool:
     extracted = nz.inventory_serial(longer) or ""
     if longer.endswith(shorter) or _compact(extracted) == shorter:
         return True
-    # Один формат, отличаются первые символы (2/4, Q/0) — хвост серийника тот же.
-    if len(first) == len(second) >= 12 and first[4:] == second[4:]:
+    if len(first) == len(second) >= 12:
         left_v, right_v = nz.rules().match_serial(first), nz.rules().match_serial(second)
-        if left_v is not None and right_v is not None and left_v.brand == right_v.brand:
+        same_vendor = (
+            left_v is not None and right_v is not None and left_v.brand == right_v.brand
+        )
+        # Один формат, отличаются первые символы (2/4, Q/0) — хвост серийника тот же.
+        if first[4:] == second[4:] and same_vendor:
+            return True
+        # EasyOCR: O/0 и Q/0 в середине и в хвосте BenQ ETR4MO2620010 vs ETR4M0262001Q.
+        if same_vendor and all(
+            a == b or b in _SERIAL_CONFUSABLES.get(a, "") for a, b in zip(first, second)
+        ):
             return True
     return False
 
@@ -99,7 +120,6 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
                     if (
                         primary.source is Source.OCR
                         and len(current_c) == len(other_c) >= 12
-                        and current_c[4:] == other_c[4:]
                         and current_c != other_c
                     ):
                         chosen = other
@@ -114,10 +134,24 @@ def reconcile(primary: Card | None, vision: Card | None) -> Card | None:
                         else:
                             filled.append(f"{title} (уточнил Cloud Vision)")
             else:
+                # QR вроде 90106-45981 проходит общую валидацию, а Cloud Vision
+                # читает настоящий S/N производителя — берём его.
+                if (
+                    field == "serial_number"
+                    and primary.source in {Source.BARCODE, Source.OCR}
+                    and nz.rules().match_serial(current) is None
+                    and nz.rules().match_serial(other) is not None
+                ):
+                    polished, _ = nz.polish_serial(other)
+                    primary.serial_number = nz.canonical_serial(polished or other)
+                    primary.serial_display = nz.display_serial(
+                        primary.serial_number, vision.serial_display or other
+                    )
+                    filled.append(f"{title} (уточнил Cloud Vision)")
                 # EasyOCR часто подставляет мусор в модель, пока штрихкод уже дал
                 # верный серийник. Если облако читает ту же этикетку и модель не
                 # была в штрихкоде — берём маркетинговое имя Cloud Vision.
-                if (
+                elif (
                     field in {"model", "brand"}
                     and serials_agree(primary.serial_number, vision.serial_number)
                     and not (field == "model" and model_from_barcode(primary))

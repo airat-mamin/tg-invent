@@ -48,7 +48,7 @@ MODEL_CONFUSABLES: dict[str, str | tuple[str, ...]] = {
     "7": "T",
 }
 DATE_LIKE = re.compile(r"^\d{4}-\d{2}(?:-\d{2})?$")
-SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN|SMARTVIEW)(?=[A-Z0-9])")
+SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN|SMARTVIEW|MATEVIEW)(?=[A-Z0-9])")
 GTIN_LENGTHS = frozenset({8, 12, 13, 14})
 PRODUCT_SKU = re.compile(r"^\d[A-Z]{2}\d{2}[A-Z]{2}$")
 
@@ -116,6 +116,11 @@ def is_valid_serial(value: str | None) -> bool:
         return False
     if is_gtin(value) or is_product_sku(value) or _exact_vendor_model(value):
         return False
+    # QR и служебные коды вроде 90106-45981: одни цифры и дефис. Настоящий
+    # цифровой серийник (iiyama) длиннее 12 знаков и без дефиса.
+    digits_only = re.sub(r"[^0-9]", "", value)
+    if re.fullmatch(r"[\d-]+", value) and ("-" in value or len(digits_only) < 12):
+        return False
     return True
 
 
@@ -161,6 +166,7 @@ def match_brand(text: str | None) -> str | None:
     known = rules().brand_names
     words = re.findall(r"[A-Z][A-Z\-]{1,20}", clean_text(text))
     for word in words:
+        word = word.strip("-")
         if word in known:
             return _canonical_brand(word)
     for word in words:
@@ -182,15 +188,16 @@ def _canonical_brand(name: str) -> str:
 def polish_serial(serial: str | None) -> tuple[str | None, bool]:
     """Применяет точечные правки шаблона к серийному номеру.
 
-    Правка принимается, только если после неё значение начинает соответствовать
-    формату производителя, — иначе она была бы догадкой на пустом месте.
+    Правка принимается, если после неё значение соответствует формату
+    производителя. Даже когда исходная строка уже «похожа» на серийник
+    (ETR4MO2620010 проходит шаблон), O после M всё равно заменяется на 0.
     Несколько правок одного вендора применяются подряд: на MSI в одном номере
     OCR одновременно путает Q с 0 и T с 1.
     """
     if not serial:
         return serial, False
     for vendor in rules().vendors:
-        if vendor.serial is None or vendor.serial.matches(serial):
+        if vendor.serial is None:
             continue
         candidate = serial
         for fix in vendor.serial.fixes:
@@ -488,7 +495,8 @@ def find_model_candidate(
 
     tokens = re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus)
     tokens += re.findall(
-        r"\b(?:PRO|MAG|MPG|MODERN|SMARTVIEW)\s+[A-Z0-9][A-Z0-9\-]{1,20}\b", corpus
+        r"\b(?:PRO|MAG|MPG|MODERN|SMARTVIEW|MATEVIEW)\s+[A-Z0-9][A-Z0-9\-]{0,20}\b",
+        corpus,
     )
     tokens += re.findall(r"\b[A-Z]\d{2}\s+\d{2}\b", corpus)
     compact_tokens = [token.replace(" ", "") for token in tokens]

@@ -190,3 +190,102 @@ def test_asus_vw226tl_label():
     assert vision is not None
     assert vision.model == "VW226TL"
     assert vision.serial_number == "B8LMQS065420"
+
+
+def test_benq_gw2480_serial_ends_with_q() -> None:
+    """GW2480-T: напечатанный S/N оканчивается на Q, EasyOCR ставит 0 и O."""
+    assert rules().match_serial("ETR4M0262001Q").brand == "BENQ"
+    assert nz.polish_serial("ETR4MO2620010") == ("ETR4M02620010", True)
+    text = (
+        "BenQ Product Name LCD Monitor Model ID GW2480-T Type GW2480 "
+        "S/N: ETR4M0262001Q P/N 9H.LGDLA.CPE"
+    )
+    assert nz.match_brand(text) == "BENQ"
+    assert nz.find_model_candidate(text, brand="BENQ") == "GW2480-T"
+    blocks = [
+        Block("BenQ", 0.9, 10, 10, 80, 40),
+        Block("Model ID GW2480-T", 0.8, 10, 50, 280, 80),
+        Block("Type GW2480", 0.7, 10, 90, 200, 120),
+        Block("S/N: ETR4M0262001Q", 0.95, 10, 160, 300, 190),
+    ]
+    card = parse_blocks(blocks)
+    assert card is not None
+    assert card.brand == "BENQ"
+    assert card.model == "GW2480-T"
+    assert card.serial_number == "ETR4M0262001Q"
+    vision = card_from_vision_text(text, blocks)
+    assert vision is not None
+    assert vision.serial_number == "ETR4M0262001Q"
+
+
+def test_benq_gw2480_ocr_then_vision_serial() -> None:
+    """EasyOCR: O после M и хвост 0; Cloud Vision читает 0 и Q — берём Vision."""
+    assert reconcile.serials_agree("ETR4MO2620010", "ETR4M0262001Q")
+    ocr = Card(
+        brand="BENQ",
+        model="GW2480-T",
+        serial_number="ETR4MO2620010",
+        source=Source.OCR,
+        confidence=Confidence.MEDIUM,
+    )
+    vision = Card(
+        brand="BENQ",
+        model="GW2480-T",
+        serial_number="ETR4M0262001Q",
+        source=Source.VISION,
+    )
+    rec = reconcile.reconcile(ocr, vision)
+    assert rec.serial_number == "ETR4M0262001Q"
+    assert any("уточнил Cloud Vision" in note for note in rec.notes)
+
+
+def test_ssn24_label_from_cyrillic_model() -> None:
+    """Живой шильдик: Модель:SSN-24, S/N SHQUN23616001465."""
+    assert rules().match_serial("SHQUN23616001465").brand == "SSN"
+    assert nz.polish_model("SSN-24", "SSN") == ("SSN-24", False)
+    text = "S/N:SHQUN23616001465 Модель:SSN-24 HDMI CE EAC CCC"
+    assert nz.match_brand(text) == "SSN"
+    blocks = [
+        Block("S/N:SHQUN23616001465", 0.95, 10, 10, 320, 40),
+        Block("Модель:SSN-24", 0.9, 330, 10, 480, 40),
+    ]
+    card = parse_blocks(blocks)
+    assert card is not None
+    assert card.brand == "SSN"
+    assert card.model == "SSN-24"
+    assert card.serial_number == "SHQUN23616001465"
+    vision = card_from_vision_text(text, blocks)
+    assert vision is not None
+    assert vision.model == "SSN-24"
+    assert vision.serial_number == "SHQUN23616001465"
+    barcode_card = barcode.card_from_payloads(["SHQUN23616001465"])
+    assert barcode_card is not None
+    assert barcode_card.brand == "SSN"
+    assert barcode_card.serial_number == "SHQUN23616001465"
+    filled = reconcile.reconcile(barcode_card, vision)
+    assert filled.model == "SSN-24"
+
+
+def test_huawei_mateview_se_label() -> None:
+    """MateView SE: S/N SHQUH…, QR 90106-45981 не серийник, RBN110N не модель."""
+    assert rules().match_serial("SHQUH22915000579").brand == "HUAWEI"
+    assert not nz.is_valid_serial("90106-45981")
+    assert barcode.card_from_payloads(["90106-45981"]) is None
+    assert nz.polish_model("RBN110N", "HUAWEI") == (None, False)
+    assert nz.polish_model("MATEVIEW SE", "HUAWEI") == ("MATEVIEW SE", False)
+    text = (
+        "HUAWEI HUAWEI MateView SE LCD Monitor "
+        "S/N:SHQUH22915000579 Made in China"
+    )
+    assert nz.match_brand(text) == "HUAWEI"
+    assert nz.find_model_candidate(text, brand="HUAWEI") == "MATEVIEW SE"
+    blocks = [
+        Block("HUAWEI", 0.99, 10, 10, 120, 40),
+        Block("HUAWEI MateView SE", 0.9, 10, 50, 280, 80),
+        Block("S/N:SHQUH22915000579", 0.95, 300, 50, 520, 80),
+    ]
+    card = parse_blocks(blocks)
+    assert card is not None
+    assert card.brand == "HUAWEI"
+    assert card.model == "MATEVIEW SE"
+    assert card.serial_number == "SHQUH22915000579"
