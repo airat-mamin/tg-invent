@@ -292,3 +292,32 @@ def test_huawei_mateview_se_label() -> None:
     assert card.brand == "HUAWEI"
     assert card.model == "MATEVIEW SE"
     assert card.serial_number == "SHQUH22915000579"
+
+
+def test_digma_dm_monb_label() -> None:
+    """Наклейка DIGMA: модель линейки DM-MON, бренд с шильдика, серийник с S/N."""
+    assert rules().by_brand("DIGMA") is not None
+    assert nz.polish_model("DM-MONB2705", "DIGMA") == ("DM-MONB2705", False)
+    assert nz.polish_model("DM-MLF24C", "DIGMA") == ("DM-MLF24C", False)
+    assert nz.polish_model("PROGRESS 24P401F", "DIGMA") == ("PROGRESS 24P401F", False)
+    assert nz.polish_model("RBN110N", "DIGMA") == (None, False)
+    text = (
+        "DIGMA LCD Monitor Модель: DM-MONB2705 "
+        "S/N: ABC12345XYZ Input 12V"
+    )
+    assert nz.match_brand(text) == "DIGMA"
+    assert nz.find_model_candidate(text, brand="DIGMA") == "DM-MONB2705"
+    blocks = [
+        Block("DIGMA", 0.99, 10, 10, 100, 40),
+        Block("Модель: DM-MONB2705", 0.9, 10, 50, 280, 80),
+        Block("S/N: ABC12345XYZ", 0.95, 10, 120, 280, 150),
+    ]
+    card = parse_blocks(blocks)
+    assert card is not None
+    assert card.brand == "DIGMA"
+    assert card.model == "DM-MONB2705"
+    assert card.serial_number == "ABC12345XYZ"
+    vision = card_from_vision_text(text, blocks)
+    assert vision is not None
+    assert vision.brand == "DIGMA"
+    assert vision.model == "DM-MONB2705"

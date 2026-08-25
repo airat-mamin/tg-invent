@@ -48,7 +48,9 @@ MODEL_CONFUSABLES: dict[str, str | tuple[str, ...]] = {
     "7": "T",
 }
 DATE_LIKE = re.compile(r"^\d{4}-\d{2}(?:-\d{2})?$")
-SERIES_PREFIX = re.compile(r"^(PRO|MAG|MODERN|SMARTVIEW|MATEVIEW)(?=[A-Z0-9])")
+SERIES_PREFIX = re.compile(
+    r"^(PROGRESS|OVERDRIVE|MATEVIEW|SMARTVIEW|MODERN|PRO|MAG)(?=[A-Z0-9])"
+)
 GTIN_LENGTHS = frozenset({8, 12, 13, 14})
 PRODUCT_SKU = re.compile(r"^\d[A-Z]{2}\d{2}[A-Z]{2}$")
 
@@ -365,14 +367,26 @@ def polish_model(value: str | None, brand: str | None = None) -> tuple[str | Non
     matches: list[tuple[str, bool]] = []
     seen: set[str] = set()
     for source in _model_source_variants(normalized, brand):
+        pretty = _pretty_model(source)
+        # Полное значение уже сходится — не меняем O на Q (DM-MONB2705 иначе
+        # становится DM-MQNB2705). Обрезки вроде VPROMP275OPG по-прежнему
+        # проходят через подбор OCR-замен.
+        if pretty and is_valid_model(pretty) and _matches_vendor_model(pretty, brand):
+            if pretty not in seen:
+                seen.add(pretty)
+                matches.append((pretty, pretty != normalized))
+            continue
         for candidate in (source, *_confusable_candidates(source, mapping=MODEL_CONFUSABLES)):
             pretty = _pretty_model(candidate)
             for item in (pretty, _extract_vendor_model(pretty, brand)):
-                if not item or item in seen:
+                if not item:
                     continue
-                if is_valid_model(item) and _matches_vendor_model(item, brand):
-                    seen.add(item)
-                    matches.append((item, item != normalized))
+                pretty_item = _pretty_model(item)
+                if pretty_item in seen:
+                    continue
+                if is_valid_model(pretty_item) and _matches_vendor_model(pretty_item, brand):
+                    seen.add(pretty_item)
+                    matches.append((pretty_item, pretty_item != normalized))
     if matches:
         pretty, fixed = max(matches, key=lambda item: _rank_model(item[0], normalized))
         return pretty, fixed
@@ -495,7 +509,7 @@ def find_model_candidate(
 
     tokens = re.findall(r"\b[A-Z0-9][A-Z0-9\-/]{3,20}\b", corpus)
     tokens += re.findall(
-        r"\b(?:PRO|MAG|MPG|MODERN|SMARTVIEW|MATEVIEW)\s+[A-Z0-9][A-Z0-9\-]{0,20}\b",
+        r"\b(?:PROGRESS|OVERDRIVE|PRO|MAG|MPG|MODERN|SMARTVIEW|MATEVIEW)\s+[A-Z0-9][A-Z0-9\-]{0,20}\b",
         corpus,
     )
     tokens += re.findall(r"\b[A-Z]\d{2}\s+\d{2}\b", corpus)

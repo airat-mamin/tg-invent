@@ -75,26 +75,32 @@ def prefer_specific_model(current: str | None, other: str | None, brand: str | N
     """Между Type GW2480 и Model ID GW2480-T оставляет более полное имя."""
     first, _ = nz.polish_model(current, brand)
     second, _ = nz.polish_model(other, brand)
-    if first and not second:
-        return first
-    if second and not first:
+    if first and second:
+        left = first.replace("-", "").replace(" ", "")
+        right = second.replace("-", "").replace(" ", "")
+        if left.startswith(right) and len(left) > len(right):
+            return first
+        if right.startswith(left) and len(right) > len(left):
+            return second
         return second
-    if not first or not second:
-        return other
-    left = first.replace("-", "").replace(" ", "")
-    right = second.replace("-", "").replace(" ", "")
-    if left.startswith(right) and len(left) > len(right):
-        return first
-    if right.startswith(left) and len(right) > len(left):
+    if second:
         return second
-    return second
+    # P24H G4 не сходится с шаблоном Dell, но это настоящая модель HP.
+    other_any, _ = nz.polish_model(other, None)
+    if other_any:
+        return other_any
+    return first or other
 
 
 def model_from_barcode(card: Card) -> bool:
     """Модель взята из полезной нагрузки штрихкода, а не из OCR рядом с ним."""
     if not card.model:
         return False
-    return any(values_agree("model", card.model, payload) for payload in card.barcode_payloads)
+    return any(
+        not values_agree("serial_number", card.serial_number, payload)
+        and values_agree("model", card.model, payload)
+        for payload in card.barcode_payloads
+    )
 
 
 def prefer_serial(primary: str | None, extra: str | None) -> str | None:
