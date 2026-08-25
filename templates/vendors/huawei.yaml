@@ -1,0 +1,13 @@
+brand: HUAWEI
+aliases: [HUAWEI, HUAWEI DEVICE]
+
+serial:
+  # Наблюдалось на MateView SE и наклейке «Модель:SSN-24»: SHQU + буква завода + 11 цифр.
+  # Примеры: SHQUH22915000579, SHQUN23616001465.
+  pattern: '^SHQU[HN]\d{11}$'
+  length: [16, 16]
+
+model:
+  # SSN-24 — код модели на русской наклейке у разъёмов.
+  # MateView SE — маркетинговое имя; B3-241H — внутренний код линейки.
+  token_pattern: '^(?:SSN-?\d{2}(?:BZ)?|MATEVIEW(?: SE)?|B3-\d{3}[A-Z]|S24)$'

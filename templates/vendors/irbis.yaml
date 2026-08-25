@@ -1,0 +1,15 @@
+brand: IRBIS
+aliases: [IRBIS]
+
+serial:
+  # S06ISM24FIDW0330429 — OCR часто ставит 1 вместо I после префикса S06.
+  pattern: ^S\d{2}ISM\d{2}FIDW\d{7}$
+  length: [19, 19]
+  fixes:
+    - name: единица вместо I в префиксе SxxISM
+      pattern: '^(S\d{2})1(SM)'
+      replacement: '\g<1>I\g<2>'
+
+model:
+  # Маркетинговое имя SmartView 24, не артикул ISM24FIDW.
+  token_pattern: '^SMARTVIEW ?\d{2}$'

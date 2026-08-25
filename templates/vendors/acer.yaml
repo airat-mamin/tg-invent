@@ -1,0 +1,12 @@
+brand: ACER
+aliases: [ACER]
+
+serial:
+  # Длинный заводской номер, не путать с EAN и PPID Dell (CN0…).
+  # Пример: MMLV4EE009235009534204.
+  pattern: '^[A-Z]{4,6}\d[A-Z]{1,3}\d{10,16}$'
+  length: [20, 24]
+
+model:
+  # V235HL, B277, G247HYL. Двубуквенный префикс ER510N — мусор OCR, не модель.
+  token_pattern: '^[A-Z]\d{3}[A-Z]{1,4}$'

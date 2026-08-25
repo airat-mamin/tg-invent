@@ -1,0 +1,8 @@
+brand: DIGMA
+aliases: [DIGMA, DIGMA PRO]
+
+model:
+  # Мониторы: DM-MONB2705, DM-MONF2710, DM-MLF24C, DM-MSF24BB.
+  # Линейки Progress 24P401F и Overdrive 27P410F.
+  # Формат серийника на живой наклейке ещё не фиксируем.
+  token_pattern: '^(?:DM-?[A-Z]{2,4}\d{2,4}[A-Z]{0,3}|PROGRESS ?\d{2}[A-Z]\d{3}[A-Z]?|OVERDRIVE ?\d{2}[A-Z]\d{3}[A-Z]?)$'

@@ -1,0 +1,17 @@
+brand: SAMSUNG
+aliases: [SAMSUNG, SAMSUNG ELECTRONICS]
+
+serial:
+  # Мониторы (Калуга): 2133HLNC800394F. Телевизоры: 15193LHB800558K.
+  pattern: '^(?:[0-9]{5}[A-Z]{3}|[A-Z0-9][0-9]{3}[A-Z]{4})[0-9]{6}[A-Z]$'
+  length: [15, 15]
+  hyphens: significant
+  fixes:
+    - name: Q вместо 0 в серийнике
+      pattern: Q
+      replacement: '0'
+
+model:
+  # Телевизоры и мониторы: серия (UE/UN), диагональ, линейка, год, суффикс рынка.
+  # Примеры: UE32D5000PW, UE32D5000PWXRU, UE40HU7000U, S24R650.
+  token_pattern: ^(?:U[EN]\d{2}[A-Z]{1,2}\d{4}[A-Z]{0,5}|[A-Z]\d{2}[A-Z]\d{3,4}[A-Z]?)$

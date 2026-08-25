@@ -1,0 +1,16 @@
+brand: ASUS
+aliases: [ASUS, ASUSTEK, ASUSTEK COMPUTER]
+
+serial:
+  # Наблюдалось на VW226TL: буква, цифра, четыре буквы завода и шесть цифр.
+  # Пример: B8LMQS065420. OCR часто читает первую B как 8.
+  pattern: '^[A-Z]\d[A-Z]{4}\d{6}$'
+  length: [12, 12]
+  fixes:
+    - name: восьмёрка вместо B в начале серийника
+      pattern: '^8(\d[A-Z]{4}\d{6})$'
+      replacement: 'B\1'
+
+model:
+  # VW226, VW226TL, VG27AQ, VA24DQ, PA248QV. Не NI3219 с блока сертификатов.
+  token_pattern: '^(?:VW|VA|VG|VY|PA|PB|MB|MG)\d{2,3}[A-Z]{0,4}$'

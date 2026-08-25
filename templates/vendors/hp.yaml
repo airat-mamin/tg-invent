@@ -1,0 +1,12 @@
+brand: HP
+aliases: [HP, HP INC, HEWLETT-PACKARD, HEWLETT PACKARD]
+
+serial:
+  # Мониторы: 10 символов. 3CM0351N70 (P24h G4), CNC2480XG3 (P27q G4), 1CR9400173 (N246V).
+  # Не путать с 7-символьным Product No. (7VH44AA, 8MB11AA, 3NS59AA) и PPID Dell.
+  pattern: '^(?:\d[A-Z]{2}[A-Z0-9]{7}|[A-Z]{3}\d{4}[A-Z0-9]{3})$'
+  length: [10, 10]
+
+model:
+  # N246V, P24H, E24G4, P24H G4, P27Q G4. Не куски серийника и не 3NS59AA.
+  token_pattern: '^[NPEV]\d{2,3}[A-Z]\d?(?: G\d)?$'
